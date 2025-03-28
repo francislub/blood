@@ -1,0 +1,197 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  DONOR
+  MEDICAL_OFFICER
+  BLOOD_BANK_TECHNICIAN
+}
+
+enum BloodType {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum BloodStatus {
+  AVAILABLE
+  RESERVED
+  USED
+  EXPIRED
+  DISCARDED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
+  CANCELLED
+}
+
+enum DonationStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  DEFERRED
+}
+
+model User {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  email          String    @unique
+  password       String
+  role           UserRole
+  phoneNumber    String?
+  address        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations based on role
+  donor          Donor?
+  medicalOfficer MedicalOfficer?
+  technician     BloodBankTechnician?
+  
+  // Common relations
+  bloodRequests  BloodRequest[]
+  createdDonations Donation[]     @relation("CreatedBy")
+}
+
+model Donor {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @unique @db.ObjectId
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodType         BloodType
+  dateOfBirth       DateTime
+  gender            String
+  weight            Float?
+  height            Float?
+  medicalHistory    String?
+  lastDonationDate  DateTime?
+  eligibleToDonateSince DateTime?
+  donations         Donation[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model MedicalOfficer {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @unique @db.ObjectId
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber   String    @unique
+  department      String
+  position        String
+  patients        Patient[]
+  transfusions    Transfusion[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model BloodBankTechnician {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String    @unique @db.ObjectId
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId      String    @unique
+  specialization  String?
+  bloodUnits      BloodUnit[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model BloodUnit {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  unitNumber      String      @unique
+  bloodType       BloodType
+  collectionDate  DateTime
+  expiryDate      DateTime
+  status          BloodStatus @default(AVAILABLE)
+  volume          Float       // in milliliters
+  donationId      String?     @db.ObjectId
+  donation        Donation?   @relation(fields: [donationId], references: [id])
+  technicianId    String?     @db.ObjectId
+  technician      BloodBankTechnician? @relation(fields: [technicianId], references: [id])
+  transfusionId   String?     @db.ObjectId
+  transfusion     Transfusion? @relation(fields: [transfusionId], references: [id])
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Donation {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  donorId         String          @db.ObjectId
+  donor           Donor           @relation(fields: [donorId], references: [id])
+  scheduledDate   DateTime
+  actualDate      DateTime?
+  status          DonationStatus  @default(SCHEDULED)
+  bloodUnits      BloodUnit[]
+  hemoglobinLevel Float?
+  notes           String?
+  createdById     String          @db.ObjectId
+  createdBy       User            @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Patient {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  hospitalId      String        @unique
+  dateOfBirth     DateTime
+  gender          String
+  bloodType       BloodType
+  contactNumber   String?
+  address         String?
+  medicalOfficerId String?      @db.ObjectId
+  medicalOfficer  MedicalOfficer? @relation(fields: [medicalOfficerId], references: [id])
+  transfusions    Transfusion[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model BloodRequest {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  requesterId     String        @db.ObjectId
+  requester       User          @relation(fields: [requesterId], references: [id])
+  bloodType       BloodType
+  quantity        Int
+  urgency         String        // e.g., "Normal", "Urgent", "Emergency"
+  purpose         String
+  patientId       String?       @db.ObjectId
+  status          RequestStatus @default(PENDING)
+  transfusions    Transfusion[]
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Transfusion {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  patientId       String      @db.ObjectId
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  requestId       String      @db.ObjectId
+  request         BloodRequest @relation(fields: [requestId], references: [id])
+  medicalOfficerId String     @db.ObjectId
+  medicalOfficer  MedicalOfficer @relation(fields: [medicalOfficerId], references: [id])
+  transfusionDate DateTime
+  bloodUnits      BloodUnit[]
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
