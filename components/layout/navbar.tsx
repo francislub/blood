@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
-export function Navbar() {
+export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const pathname = usePathname()
   const { setTheme, theme } = useTheme()

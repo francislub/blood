@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Droplet, Facebook, Instagram, Twitter, Phone, Mail, MapPin, Clock } from "lucide-react"
 
-export function Footer() {
+export default function Footer() {
   const pathname = usePathname()
 
   // Don't show footer on auth pages and dashboard
