@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { signIn } from "next-auth/react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Droplet } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState, Suspense } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { signIn } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Droplet } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const formSchema = z.object({
   email: z.string().email({
@@ -21,14 +21,24 @@ const formSchema = z.object({
   password: z.string().min(1, {
     message: "Password is required.",
   }),
-})
+});
+
+function CallbackUrlWrapper({ setCallbackUrl }: { setCallbackUrl: (url: string) => void }) {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+
+  useState(() => {
+    setCallbackUrl(callbackUrl);
+  });
+
+  return null;
+}
 
 export default function SignInPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const [callbackUrl, setCallbackUrl] = useState("/dashboard");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -36,30 +46,30 @@ export default function SignInPage() {
       email: "",
       password: "",
     },
-  })
+  });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
 
     try {
       const result = await signIn("credentials", {
         email: values.email,
         password: values.password,
         redirect: false,
-      })
+      });
 
       if (result?.error) {
-        setError("Invalid email or password. Please try again.")
-        setIsLoading(false)
-        return
+        setError("Invalid email or password. Please try again.");
+        setIsLoading(false);
+        return;
       }
 
-      router.push(callbackUrl)
-      router.refresh()
+      router.push(callbackUrl);
+      router.refresh();
     } catch (error) {
-      setError("An unexpected error occurred. Please try again.")
-      setIsLoading(false)
+      setError("An unexpected error occurred. Please try again.");
+      setIsLoading(false);
     }
   }
 
@@ -80,6 +90,9 @@ export default function SignInPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+            <Suspense fallback={null}>
+              <CallbackUrlWrapper setCallbackUrl={setCallbackUrl} />
+            </Suspense>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -142,6 +155,5 @@ export default function SignInPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }
-
