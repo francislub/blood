@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Navbar } from "@/components/layout/navbar"
-import { Footer } from "@/components/layout/footer"
+import Navbar from "@/components/layout/navbar";
+import Footer from "@/components/layout/footer";
 import { ArrowRight, Calendar, Droplet, Heart, Users, Shield, Stethoscope, FlaskRound } from "lucide-react"
 
 export default function HomePage() {
