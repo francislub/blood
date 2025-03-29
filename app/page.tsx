@@ -7,7 +7,7 @@ import { ArrowRight, Calendar, Droplet, Heart, Users, Shield, Stethoscope, Flask
 export default function HomePage() {
   return (
     <div className="flex flex-col min-h-screen">
-      <Navbar />
+      {/* <Navbar /> */}
       <main className="flex-grow">
         {/* Hero Section */}
         <section className="bg-gradient-to-r from-red-500 to-red-700 py-16 md:py-24">
@@ -23,14 +23,14 @@ export default function HomePage() {
                   <Button asChild size="lg" className="bg-white text-red-600 hover:bg-gray-100">
                     <Link href="/donate">Donate Now</Link>
                   </Button>
-                  <Button asChild size="lg" variant="outline" className="border-white text-white hover:bg-white/10">
+                  <Button asChild size="lg" variant="outline" className="border-white text-red-600 hover:bg-white/10">
                     <Link href="/auth/register">Register as Donor</Link>
                   </Button>
                 </div>
               </div>
               <div className="md:w-1/2 flex justify-center">
                 <img
-                  src="/placeholder.svg?height=400&width=500"
+                  src="/blood.png?height=400&width=500"
                   alt="Blood donation"
                   className="rounded-lg shadow-xl max-w-full h-auto"
                 />
@@ -289,7 +289,7 @@ export default function HomePage() {
               <Button asChild size="lg" className="bg-white text-red-600 hover:bg-gray-100">
                 <Link href="/auth/signin">Sign In</Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-white text-white hover:bg-white/10">
+              <Button asChild size="lg" variant="outline" className="border-white text-red-600 hover:bg-white/10">
                 <Link href="/auth/register">
                   Register Now <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
@@ -298,7 +298,7 @@ export default function HomePage() {
           </div>
         </section>
       </main>
-      <Footer />
+      {/* <Footer /> */}
     </div>
   )
 }
