@@ -7,114 +7,73 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Droplet, FileText, ArrowRight } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+interface DonationStats {
+  totalDonations: number
+  totalVolume: number
+  lastDonation: string | null
+  nextEligibleDate: string | null
+}
+
+interface Donation {
+  id: string
+  scheduledDate: string
+  actualDate: string | null
+  status: string
+  hemoglobinLevel: number | null
+  bloodUnits: Array<{ id: string; volume: number }>
+  notes: string | null
+}
 
 export default function DonationHistoryPage() {
-  const [donations, setDonations] = useState([])
+  const [donations, setDonations] = useState<Donation[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DonationStats>({
     totalDonations: 0,
     totalVolume: 0,
     lastDonation: null,
     nextEligibleDate: null,
   })
+  const { toast } = useToast()
 
   useEffect(() => {
-    // In a real application, you would fetch this data from your API
-    // This is just mock data for demonstration
-    const mockDonations = [
-      {
-        id: "1",
-        scheduledDate: "2023-03-15",
-        actualDate: "2023-03-15",
-        status: "COMPLETED",
-        hemoglobinLevel: 14.2,
-        bloodUnits: [{ id: "BU-001-23", volume: 450 }],
-        notes: "Successful donation, no complications.",
-      },
-      {
-        id: "2",
-        scheduledDate: "2022-12-10",
-        actualDate: "2022-12-10",
-        status: "COMPLETED",
-        hemoglobinLevel: 13.8,
-        bloodUnits: [{ id: "BU-002-22", volume: 450 }],
-        notes: "Donor was slightly dehydrated but donation was successful.",
-      },
-      {
-        id: "3",
-        scheduledDate: "2022-09-05",
-        actualDate: "2022-09-05",
-        status: "COMPLETED",
-        hemoglobinLevel: 14.5,
-        bloodUnits: [{ id: "BU-003-22", volume: 450 }],
-        notes: "Excellent donation, donor was well prepared.",
-      },
-      {
-        id: "4",
-        scheduledDate: "2022-06-20",
-        actualDate: "2022-06-20",
-        status: "COMPLETED",
-        hemoglobinLevel: 13.9,
-        bloodUnits: [{ id: "BU-004-22", volume: 450 }],
-        notes: "Normal donation, no issues.",
-      },
-      {
-        id: "5",
-        scheduledDate: "2022-03-15",
-        actualDate: "2022-03-15",
-        status: "COMPLETED",
-        hemoglobinLevel: 14.0,
-        bloodUnits: [{ id: "BU-005-22", volume: 450 }],
-        notes: "Donor experienced mild dizziness after donation but recovered quickly.",
-      },
-      {
-        id: "6",
-        scheduledDate: "2023-06-20",
-        actualDate: null,
-        status: "SCHEDULED",
-        hemoglobinLevel: null,
-        bloodUnits: [],
-        notes: "Upcoming donation appointment.",
-      },
-    ]
+    const fetchDonationHistory = async () => {
+      try {
+        setIsLoading(true)
 
-    // Calculate statistics
-    const completedDonations = mockDonations.filter((d) => d.status === "COMPLETED")
-    const totalVolume = completedDonations.reduce((sum, donation) => {
-      return sum + donation.bloodUnits.reduce((unitSum, unit) => unitSum + unit.volume, 0)
-    }, 0)
+        // Fetch donation stats
+        const statsResponse = await fetch("/api/donations/stats")
+        if (!statsResponse.ok) {
+          throw new Error("Failed to fetch donation stats")
+        }
+        const statsData = await statsResponse.json()
+        setStats(statsData)
 
-    const sortedDonations = [...completedDonations].sort(
-      (a, b) => new Date(b.actualDate).getTime() - new Date(a.actualDate).getTime(),
-    )
-
-    const lastDonation = sortedDonations.length > 0 ? sortedDonations[0].actualDate : null
-
-    // Calculate next eligible date (56 days after last donation)
-    let nextEligibleDate = null
-    if (lastDonation) {
-      const date = new Date(lastDonation)
-      date.setDate(date.getDate() + 56)
-      nextEligibleDate = date.toISOString().split("T")[0]
+        // Fetch donation history
+        const historyResponse = await fetch("/api/donations")
+        if (!historyResponse.ok) {
+          throw new Error("Failed to fetch donation history")
+        }
+        const historyData = await historyResponse.json()
+        setDonations(historyData)
+      } catch (error) {
+        console.error("Error fetching donation data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load donation history",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    const stats = {
-      totalDonations: completedDonations.length,
-      totalVolume,
-      lastDonation,
-      nextEligibleDate,
-    }
-
-    // Simulate API call
-    setTimeout(() => {
-      setDonations(mockDonations)
-      setStats(stats)
-      setIsLoading(false)
-    }, 1000)
-  }, [])
+    fetchDonationHistory()
+  }, [toast])
 
   // Helper function to get status badge variant
-  const getStatusBadgeVariant = (status) => {
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case "COMPLETED":
         return "success"
@@ -133,6 +92,12 @@ export default function DonationHistoryPage() {
   const isEligible = () => {
     if (!stats.nextEligibleDate) return true
     return new Date(stats.nextEligibleDate) <= new Date()
+  }
+
+  // Format date for display
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "N/A"
+    return new Date(dateString).toLocaleDateString()
   }
 
   return (
@@ -177,9 +142,7 @@ export default function DonationHistoryPage() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.lastDonation ? new Date(stats.lastDonation).toLocaleDateString() : "Never"}
-            </div>
+            <div className="text-2xl font-bold">{stats.lastDonation ? formatDate(stats.lastDonation) : "Never"}</div>
             <p className="text-xs text-muted-foreground">Date of last donation</p>
           </CardContent>
         </Card>
@@ -190,7 +153,7 @@ export default function DonationHistoryPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats.nextEligibleDate ? new Date(stats.nextEligibleDate).toLocaleDateString() : "Eligible now"}
+              {stats.nextEligibleDate ? formatDate(stats.nextEligibleDate) : "Eligible now"}
             </div>
             <p className="text-xs text-muted-foreground">
               {isEligible() ? "You can donate now" : "When you can donate again"}
@@ -235,7 +198,7 @@ export default function DonationHistoryPage() {
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <div>
-                            <div>{new Date(donation.scheduledDate).toLocaleDateString()}</div>
+                            <div>{formatDate(donation.scheduledDate)}</div>
                             {donation.status === "SCHEDULED" && (
                               <div className="text-xs text-muted-foreground">Scheduled</div>
                             )}

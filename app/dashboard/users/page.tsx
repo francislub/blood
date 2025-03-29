@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Search, MoreHorizontal, Edit, Trash, UserPlus } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 interface User {
   id: string
@@ -45,6 +45,7 @@ export default function UsersPage() {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     // Only admins can access user management
@@ -76,7 +77,7 @@ export default function UsersPage() {
     if (status === "authenticated" && session?.user?.role === "ADMIN") {
       fetchUsers()
     }
-  }, [session, status, router])
+  }, [session, status, router, toast])
 
   // Filter users based on search term
   const filteredUsers = users.filter(

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Plus, Download, Calendar, User, Droplet, CheckCircle2, XCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export default function DonorsPage() {
   const [donors, setDonors] = useState([])
@@ -17,74 +18,31 @@ export default function DonorsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [eligibilityFilter, setEligibilityFilter] = useState("")
+  const { toast } = useToast()
 
   useEffect(() => {
-    // In a real application, you would fetch this data from your API
-    // This is just mock data for demonstration
-    const mockDonors = [
-      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        bloodType: "A_POSITIVE",
-        gender: "Male",
-        phoneNumber: "+255 123 456 789",
-        lastDonation: "2023-03-15",
-        eligibleToDonateSince: "2023-05-10",
-        totalDonations: 5,
-      },
-      {
-        id: "2",
-        name: "Jane Smith",
-        email: "jane.smith@example.com",
-        bloodType: "O_NEGATIVE",
-        gender: "Female",
-        phoneNumber: "+255 987 654 321",
-        lastDonation: "2023-04-20",
-        eligibleToDonateSince: "2023-06-15",
-        totalDonations: 3,
-      },
-      {
-        id: "3",
-        name: "Robert Johnson",
-        email: "robert.johnson@example.com",
-        bloodType: "B_POSITIVE",
-        gender: "Male",
-        phoneNumber: "+255 456 789 123",
-        lastDonation: "2023-01-10",
-        eligibleToDonateSince: "2023-03-07",
-        totalDonations: 8,
-      },
-      {
-        id: "4",
-        name: "Emily Davis",
-        email: "emily.davis@example.com",
-        bloodType: "AB_POSITIVE",
-        gender: "Female",
-        phoneNumber: "+255 789 123 456",
-        lastDonation: null,
-        eligibleToDonateSince: null,
-        totalDonations: 0,
-      },
-      {
-        id: "5",
-        name: "Michael Brown",
-        email: "michael.brown@example.com",
-        bloodType: "A_NEGATIVE",
-        gender: "Male",
-        phoneNumber: "+255 321 654 987",
-        lastDonation: "2023-05-05",
-        eligibleToDonateSince: "2023-07-01",
-        totalDonations: 2,
-      },
-    ]
+    const fetchDonors = async () => {
+      try {
+        const response = await fetch("/api/donors")
+        if (!response.ok) {
+          throw new Error("Failed to fetch donors")
+        }
+        const data = await response.json()
+        setDonors(data)
+      } catch (error) {
+        console.error("Error fetching donors:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load donor data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-    // Simulate API call
-    setTimeout(() => {
-      setDonors(mockDonors)
-      setIsLoading(false)
-    }, 1000)
-  }, [])
+    fetchDonors()
+  }, [toast])
 
   // Helper function to format blood type for display
   const formatBloodType = (type) => {
@@ -101,9 +59,9 @@ export default function DonorsPage() {
   const filteredDonors = donors.filter((donor) => {
     // Search query filter
     const matchesSearch =
-      donor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      donor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      donor.phoneNumber.includes(searchQuery)
+      donor.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      donor.user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (donor.user.phoneNumber && donor.user.phoneNumber.includes(searchQuery))
 
     // Blood type filter
     const matchesBloodType = bloodTypeFilter ? donor.bloodType === bloodTypeFilter : true
@@ -140,7 +98,18 @@ export default function DonorsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="all">
+      <Tabs
+        defaultValue="all"
+        onValueChange={(value) => {
+          if (value === "eligible") {
+            setEligibilityFilter("eligible")
+          } else if (value === "recent") {
+            setEligibilityFilter("")
+          } else {
+            setEligibilityFilter("")
+          }
+        }}
+      >
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <TabsList>
             <TabsTrigger value="all">All Donors</TabsTrigger>
@@ -214,8 +183,8 @@ export default function DonorsPage() {
                             <div className="flex items-center gap-2">
                               <User className="h-4 w-4 text-muted-foreground" />
                               <div>
-                                <div>{donor.name}</div>
-                                <div className="text-xs text-muted-foreground">{donor.email}</div>
+                                <div>{donor.user.name}</div>
+                                <div className="text-xs text-muted-foreground">{donor.user.email}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -225,12 +194,12 @@ export default function DonorsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>{donor.gender}</TableCell>
-                          <TableCell>{donor.phoneNumber}</TableCell>
+                          <TableCell>{donor.user.phoneNumber}</TableCell>
                           <TableCell>
-                            {donor.lastDonation ? (
+                            {donor.lastDonationDate ? (
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                {new Date(donor.lastDonation).toLocaleDateString()}
+                                {new Date(donor.lastDonationDate).toLocaleDateString()}
                               </div>
                             ) : (
                               <span className="text-muted-foreground">Never donated</span>
@@ -297,8 +266,8 @@ export default function DonorsPage() {
                             <div className="flex items-center gap-2">
                               <User className="h-4 w-4 text-muted-foreground" />
                               <div>
-                                <div>{donor.name}</div>
-                                <div className="text-xs text-muted-foreground">{donor.email}</div>
+                                <div>{donor.user.name}</div>
+                                <div className="text-xs text-muted-foreground">{donor.user.email}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -308,10 +277,10 @@ export default function DonorsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {donor.lastDonation ? (
+                            {donor.lastDonationDate ? (
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                {new Date(donor.lastDonation).toLocaleDateString()}
+                                {new Date(donor.lastDonationDate).toLocaleDateString()}
                               </div>
                             ) : (
                               <span className="text-muted-foreground">Never donated</span>
@@ -320,7 +289,7 @@ export default function DonorsPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Droplet className="h-4 w-4 text-muted-foreground" />
-                              {donor.totalDonations} donations
+                              {donor.donationCount || 0} donations
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
@@ -363,8 +332,8 @@ export default function DonorsPage() {
                     {filteredDonors
                       .filter(
                         (donor) =>
-                          donor.lastDonation &&
-                          new Date(donor.lastDonation) >= new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+                          donor.lastDonationDate &&
+                          new Date(donor.lastDonationDate) >= new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
                       )
                       .map((donor) => (
                         <TableRow key={donor.id}>
@@ -372,8 +341,8 @@ export default function DonorsPage() {
                             <div className="flex items-center gap-2">
                               <User className="h-4 w-4 text-muted-foreground" />
                               <div>
-                                <div>{donor.name}</div>
-                                <div className="text-xs text-muted-foreground">{donor.email}</div>
+                                <div>{donor.user.name}</div>
+                                <div className="text-xs text-muted-foreground">{donor.user.email}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -385,7 +354,7 @@ export default function DonorsPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(donor.lastDonation).toLocaleDateString()}
+                              {new Date(donor.lastDonationDate).toLocaleDateString()}
                             </div>
                           </TableCell>
                           <TableCell>

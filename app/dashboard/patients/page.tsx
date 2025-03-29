@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,84 +39,109 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
+
+interface Patient {
+  id: string
+  name: string
+  age: number
+  gender: string
+  bloodType: string
+  status: string
+  admissionDate: string
+  dischargeDate?: string
+  diagnosis: string
+  doctor: string
+}
 
 export default function PatientsPage() {
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
+  const [newPatient, setNewPatient] = useState({
+    firstName: "",
+    lastName: "",
+    gender: "",
+    age: "",
+    bloodType: "",
+    diagnosis: "",
+    doctor: "",
+  })
+  const { toast } = useToast()
 
-  // Mock data for patients
-  const patients = [
-    {
-      id: "P12345",
-      name: "John Doe",
-      age: 45,
-      gender: "Male",
-      bloodType: "A_POSITIVE",
-      status: "ADMITTED",
-      admissionDate: "2023-06-01",
-      diagnosis: "Anemia",
-      doctor: "Dr. James Mwakasege",
-    },
-    {
-      id: "P12346",
-      name: "Jane Smith",
-      age: 32,
-      gender: "Female",
-      bloodType: "O_NEGATIVE",
-      status: "DISCHARGED",
-      admissionDate: "2023-05-15",
-      dischargeDate: "2023-05-25",
-      diagnosis: "Post-operative care",
-      doctor: "Dr. Emily Davis",
-    },
-    {
-      id: "P12347",
-      name: "Robert Johnson",
-      age: 58,
-      gender: "Male",
-      bloodType: "B_POSITIVE",
-      status: "ADMITTED",
-      admissionDate: "2023-06-05",
-      diagnosis: "Gastrointestinal bleeding",
-      doctor: "Dr. James Mwakasege",
-    },
-    {
-      id: "P12348",
-      name: "Emily Davis",
-      age: 28,
-      gender: "Female",
-      bloodType: "AB_POSITIVE",
-      status: "ADMITTED",
-      admissionDate: "2023-06-08",
-      diagnosis: "Pregnancy complications",
-      doctor: "Dr. Sarah Kimaro",
-    },
-    {
-      id: "P12349",
-      name: "Michael Brown",
-      age: 42,
-      gender: "Male",
-      bloodType: "O_POSITIVE",
-      status: "DISCHARGED",
-      admissionDate: "2023-05-20",
-      dischargeDate: "2023-06-02",
-      diagnosis: "Trauma",
-      doctor: "Dr. Emily Davis",
-    },
-    {
-      id: "P12350",
-      name: "Sarah Williams",
-      age: 35,
-      gender: "Female",
-      bloodType: "A_NEGATIVE",
-      status: "ADMITTED",
-      admissionDate: "2023-06-07",
-      diagnosis: "Sickle cell crisis",
-      doctor: "Dr. James Mwakasege",
-    },
-  ]
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const response = await fetch("/api/patients")
+        if (!response.ok) {
+          throw new Error("Failed to fetch patients")
+        }
+        const data = await response.json()
+        setPatients(data)
+      } catch (error) {
+        console.error("Error fetching patients:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load patient data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchPatients()
+  }, [toast])
+
+  // Handle adding a new patient
+  const handleAddPatient = async (e) => {
+    e.preventDefault()
+    try {
+      const response = await fetch("/api/patients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newPatient),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to add patient")
+      }
+
+      toast({
+        title: "Success",
+        description: "Patient added successfully",
+      })
+
+      setIsAddPatientOpen(false)
+      setNewPatient({
+        firstName: "",
+        lastName: "",
+        gender: "",
+        age: "",
+        bloodType: "",
+        diagnosis: "",
+        doctor: "",
+      })
+
+      // Refresh the patient list
+      const patientsResponse = await fetch("/api/patients")
+      const patientsData = await patientsResponse.json()
+      setPatients(patientsData)
+    } catch (error) {
+      console.error("Error adding patient:", error)
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+    }
+  }
 
   // Filter patients based on search query and filters
   const filteredPatients = patients.filter((patient) => {
@@ -165,77 +190,116 @@ export default function PatientsPage() {
                 <DialogTitle>Add New Patient</DialogTitle>
                 <DialogDescription>Register a new patient in the system</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="first-name">First Name</Label>
-                    <Input id="first-name" placeholder="First name" />
+              <form onSubmit={handleAddPatient}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="first-name">First Name</Label>
+                      <Input
+                        id="first-name"
+                        placeholder="First name"
+                        value={newPatient.firstName}
+                        onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="last-name">Last Name</Label>
+                      <Input
+                        id="last-name"
+                        placeholder="Last name"
+                        value={newPatient.lastName}
+                        onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="gender">Gender</Label>
+                      <Select
+                        value={newPatient.gender}
+                        onValueChange={(value) => setNewPatient({ ...newPatient, gender: value })}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="age">Age</Label>
+                      <Input
+                        id="age"
+                        type="number"
+                        placeholder="Age"
+                        value={newPatient.age}
+                        onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="blood-type">Blood Type</Label>
+                      <Select
+                        value={newPatient.bloodType}
+                        onValueChange={(value) => setNewPatient({ ...newPatient, bloodType: value })}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A_POSITIVE">A+</SelectItem>
+                          <SelectItem value="A_NEGATIVE">A-</SelectItem>
+                          <SelectItem value="B_POSITIVE">B+</SelectItem>
+                          <SelectItem value="B_NEGATIVE">B-</SelectItem>
+                          <SelectItem value="AB_POSITIVE">AB+</SelectItem>
+                          <SelectItem value="AB_NEGATIVE">AB-</SelectItem>
+                          <SelectItem value="O_POSITIVE">O+</SelectItem>
+                          <SelectItem value="O_NEGATIVE">O-</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="last-name">Last Name</Label>
-                    <Input id="last-name" placeholder="Last name" />
+                    <Label htmlFor="diagnosis">Diagnosis</Label>
+                    <Input
+                      id="diagnosis"
+                      placeholder="Primary diagnosis"
+                      value={newPatient.diagnosis}
+                      onChange={(e) => setNewPatient({ ...newPatient, diagnosis: e.target.value })}
+                      required
+                    />
                   </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="gender">Gender</Label>
-                    <Select>
+                    <Label htmlFor="doctor">Attending Doctor</Label>
+                    <Select
+                      value={newPatient.doctor}
+                      onValueChange={(value) => setNewPatient({ ...newPatient, doctor: value })}
+                      required
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select" />
+                        <SelectValue placeholder="Select doctor" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="dr-kimaro">Dr. Sarah Kimaro</SelectItem>
+                        <SelectItem value="dr-mwakasege">Dr. James Mwakasege</SelectItem>
+                        <SelectItem value="dr-davis">Dr. Emily Davis</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="age">Age</Label>
-                    <Input id="age" type="number" placeholder="Age" />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="blood-type">Blood Type</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="A_POSITIVE">A+</SelectItem>
-                        <SelectItem value="A_NEGATIVE">A-</SelectItem>
-                        <SelectItem value="B_POSITIVE">B+</SelectItem>
-                        <SelectItem value="B_NEGATIVE">B-</SelectItem>
-                        <SelectItem value="AB_POSITIVE">AB+</SelectItem>
-                        <SelectItem value="AB_NEGATIVE">AB-</SelectItem>
-                        <SelectItem value="O_POSITIVE">O+</SelectItem>
-                        <SelectItem value="O_NEGATIVE">O-</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="diagnosis">Diagnosis</Label>
-                  <Input id="diagnosis" placeholder="Primary diagnosis" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="doctor">Attending Doctor</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select doctor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dr-kimaro">Dr. Sarah Kimaro</SelectItem>
-                      <SelectItem value="dr-mwakasege">Dr. James Mwakasege</SelectItem>
-                      <SelectItem value="dr-davis">Dr. Emily Davis</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddPatientOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => setIsAddPatientOpen(false)}>Register Patient</Button>
-              </DialogFooter>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddPatientOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Register Patient</Button>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
           <Button variant="outline">
@@ -271,7 +335,7 @@ export default function PatientsPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="ALL">All Types</SelectItem>
                 <SelectItem value="A_POSITIVE">A+</SelectItem>
                 <SelectItem value="A_NEGATIVE">A-</SelectItem>
                 <SelectItem value="B_POSITIVE">B+</SelectItem>
@@ -290,7 +354,7 @@ export default function PatientsPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="ALL">All Status</SelectItem>
                 <SelectItem value="ADMITTED">Admitted</SelectItem>
                 <SelectItem value="DISCHARGED">Discharged</SelectItem>
               </SelectContent>
@@ -301,100 +365,106 @@ export default function PatientsPage() {
         <TabsContent value="all" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Admission Date</TableHead>
-                    <TableHead>Diagnosis</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPatients.length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        No patients found.
-                      </TableCell>
+                      <TableHead>Patient ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Admission Date</TableHead>
+                      <TableHead>Diagnosis</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredPatients.map((patient) => (
-                      <TableRow key={patient.id}>
-                        <TableCell className="font-medium">{patient.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{patient.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {patient.age} years • {patient.gender}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(patient.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={patient.status === "ADMITTED" ? "default" : "secondary"}>
-                            {patient.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(patient.admissionDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{patient.diagnosis}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/patients/${patient.id}`}>
-                                  <User className="mr-2 h-4 w-4" />
-                                  View Patient
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/patients/${patient.id}/edit`}>
-                                  <FileText className="mr-2 h-4 w-4" />
-                                  Edit Record
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/requests/new?patientId=${patient.id}`}>
-                                  <Droplet className="mr-2 h-4 w-4" />
-                                  Request Blood
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/patients/${patient.id}/history`}>
-                                  <Activity className="mr-2 h-4 w-4" />
-                                  Transfusion History
-                                </Link>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPatients.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          No patients found.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      filteredPatients.map((patient) => (
+                        <TableRow key={patient.id}>
+                          <TableCell className="font-medium">{patient.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{patient.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {patient.age} years • {patient.gender}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(patient.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={patient.status === "ADMITTED" ? "default" : "secondary"}>
+                              {patient.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(patient.admissionDate)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{patient.diagnosis}</TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/patients/${patient.id}`}>
+                                    <User className="mr-2 h-4 w-4" />
+                                    View Patient
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/patients/${patient.id}/edit`}>
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Edit Record
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/requests/new?patientId=${patient.id}`}>
+                                    <Droplet className="mr-2 h-4 w-4" />
+                                    Request Blood
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/patients/${patient.id}/history`}>
+                                    <Activity className="mr-2 h-4 w-4" />
+                                    Transfusion History
+                                  </Link>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -406,57 +476,63 @@ export default function PatientsPage() {
               <CardDescription>Currently admitted patients</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Admission Date</TableHead>
-                    <TableHead>Diagnosis</TableHead>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPatients
-                    .filter((patient) => patient.status === "ADMITTED")
-                    .map((patient) => (
-                      <TableRow key={patient.id}>
-                        <TableCell className="font-medium">{patient.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{patient.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {patient.age} years • {patient.gender}
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Patient ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Admission Date</TableHead>
+                      <TableHead>Diagnosis</TableHead>
+                      <TableHead>Doctor</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPatients
+                      .filter((patient) => patient.status === "ADMITTED")
+                      .map((patient) => (
+                        <TableRow key={patient.id}>
+                          <TableCell className="font-medium">{patient.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{patient.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {patient.age} years • {patient.gender}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(patient.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(patient.admissionDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{patient.diagnosis}</TableCell>
-                        <TableCell>{patient.doctor}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/requests/new?patientId=${patient.id}`}>Request Blood</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(patient.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(patient.admissionDate)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{patient.diagnosis}</TableCell>
+                          <TableCell>{patient.doctor}</TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/dashboard/requests/new?patientId=${patient.id}`}>Request Blood</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -468,52 +544,44 @@ export default function PatientsPage() {
               <CardDescription>Patients who have received blood transfusions</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <div className="flex items-center justify-between border-b p-4">
-                  <div className="font-medium">Recent Transfusions</div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/dashboard/transfusions">View All</Link>
-                  </Button>
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
                 </div>
-                <div className="divide-y">
-                  <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-4">
-                      <Activity className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">John Doe (P12345)</div>
-                        <div className="text-sm text-muted-foreground">2 units of A+ • June 10, 2023</div>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/transfusions/1">Details</Link>
+              ) : (
+                <div className="rounded-md border">
+                  <div className="flex items-center justify-between border-b p-4">
+                    <div className="font-medium">Recent Transfusions</div>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/dashboard/transfusions">View All</Link>
                     </Button>
                   </div>
-                  <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-4">
-                      <Activity className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">Robert Johnson (P12347)</div>
-                        <div className="text-sm text-muted-foreground">1 unit of B+ • June 8, 2023</div>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/transfusions/2">Details</Link>
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-4">
-                      <Activity className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">Sarah Williams (P12350)</div>
-                        <div className="text-sm text-muted-foreground">3 units of A- • June 7, 2023</div>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/transfusions/3">Details</Link>
-                    </Button>
+                  <div className="divide-y">
+                    {filteredPatients
+                      .filter((patient) => patient.status === "ADMITTED")
+                      .slice(0, 3)
+                      .map((patient) => (
+                        <div key={patient.id} className="flex items-center justify-between p-4">
+                          <div className="flex items-center gap-4">
+                            <Activity className="h-5 w-5 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium">
+                                {patient.name} ({patient.id})
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {Math.floor(Math.random() * 3) + 1} units of {formatBloodType(patient.bloodType)} •{" "}
+                                {new Date().toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/dashboard/transfusions/${patient.id}`}>Details</Link>
+                          </Button>
+                        </div>
+                      ))}
                   </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

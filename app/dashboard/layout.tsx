@@ -1,49 +1,33 @@
-"use client"
-
 import type React from "react"
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { getServerSession } from "next-auth"
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
-import { useSession } from "next-auth/react"
-import { useRouter, usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
-import DashboardSidebar from "@/components/dashboard/dashboard-sidebar"
+export const metadata: Metadata = {
+  title: "Dashboard | Blood Bank Management System",
+  description: "Blood Bank Management System Dashboard",
+}
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const pathname = usePathname()
-  const [isLoading, setIsLoading] = useState(true)
+  const session = await getServerSession(authOptions)
 
-  useEffect(() => {
-    if (status === "loading") return
-
-    if (!session) {
-      router.push(`/auth/signin?callbackUrl=${encodeURIComponent(pathname || "/dashboard")}`)
-    } else {
-      setIsLoading(false)
-    }
-  }, [session, status, router, pathname])
-
-  if (isLoading || status === "loading") {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading dashboard...</p>
-        </div>
-      </div>
-    )
+  if (!session) {
+    redirect("/auth/signin?callbackUrl=/dashboard")
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <DashboardSidebar />
-      <div className="flex-1 overflow-auto">
-        <div className="container mx-auto py-6 px-4 md:px-6">{children}</div>
+    <div className="flex min-h-screen flex-col">
+      <div className="flex flex-1">
+        <DashboardSidebar />
+        <main className="flex-1 md:pl-64">
+          <div className="container mx-auto p-4 pt-16">{children}</div>
+        </main>
       </div>
     </div>
   )

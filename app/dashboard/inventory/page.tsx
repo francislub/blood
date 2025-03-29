@@ -5,121 +5,167 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, Download, Filter, Calendar, AlertTriangle, FlaskRoundIcon as Flask, Droplet } from "lucide-react"
+import {
+  Search,
+  Plus,
+  Download,
+  Filter,
+  Calendar,
+  AlertTriangle,
+  FlaskRoundIcon as Flask,
+  Droplet,
+  Trash2,
+} from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+
+interface BloodUnit {
+  id: string
+  unitNumber: string
+  bloodType: string
+  collectionDate: string
+  expiryDate: string
+  volume: number
+  status: string
+  donationId: string | null
+  donor?: {
+    id: string
+    user: {
+      name: string
+      email: string
+    }
+  }
+}
 
 export default function InventoryPage() {
-  const [bloodUnits, setBloodUnits] = useState([])
+  const [bloodUnits, setBloodUnits] = useState<BloodUnit[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [isAddUnitOpen, setIsAddUnitOpen] = useState(false)
+  const [newUnit, setNewUnit] = useState({
+    unitNumber: "",
+    bloodType: "",
+    collectionDate: "",
+    expiryDate: "",
+    volume: 450,
+    donationId: "",
+    status: "AVAILABLE",
+  })
+  const { toast } = useToast()
+
+  // Fetch blood units from the database
+  const fetchBloodUnits = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/blood-units")
+      if (!response.ok) {
+        throw new Error("Failed to fetch blood units")
+      }
+      const data = await response.json()
+      setBloodUnits(data)
+    } catch (error) {
+      console.error("Error fetching blood units:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load blood inventory data",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // In a real application, you would fetch this data from your API
-    // This is just mock data for demonstration
-    const mockBloodUnits = [
-      {
-        id: "1",
-        unitNumber: "BU-001-23",
-        bloodType: "A_POSITIVE",
-        collectionDate: "2023-05-15",
-        expiryDate: "2023-06-15",
-        status: "AVAILABLE",
-        donorName: "John Doe",
-        volume: 450,
-        technicianName: "Sarah Williams",
-      },
-      {
-        id: "2",
-        unitNumber: "BU-002-23",
-        bloodType: "O_NEGATIVE",
-        collectionDate: "2023-05-16",
-        expiryDate: "2023-06-16",
-        status: "AVAILABLE",
-        donorName: "Jane Smith",
-        volume: 450,
-        technicianName: "Sarah Williams",
-      },
-      {
-        id: "3",
-        unitNumber: "BU-003-23",
-        bloodType: "B_POSITIVE",
-        collectionDate: "2023-05-10",
-        expiryDate: "2023-06-10",
-        status: "RESERVED",
-        donorName: "Robert Johnson",
-        volume: 450,
-        technicianName: "Michael Brown",
-      },
-      {
-        id: "4",
-        unitNumber: "BU-004-23",
-        bloodType: "AB_POSITIVE",
-        collectionDate: "2023-04-20",
-        expiryDate: "2023-05-20",
-        status: "EXPIRED",
-        donorName: "Emily Davis",
-        volume: 450,
-        technicianName: "Michael Brown",
-      },
-      {
-        id: "5",
-        unitNumber: "BU-005-23",
-        bloodType: "A_NEGATIVE",
-        collectionDate: "2023-05-05",
-        expiryDate: "2023-06-05",
-        status: "USED",
-        donorName: "Michael Brown",
-        volume: 450,
-        technicianName: "Sarah Williams",
-        patientName: "Alice Johnson",
-        usedDate: "2023-05-20",
-      },
-      {
-        id: "6",
-        unitNumber: "BU-006-23",
-        bloodType: "O_POSITIVE",
-        collectionDate: "2023-06-01",
-        expiryDate: "2023-07-01",
-        status: "AVAILABLE",
-        donorName: "David Wilson",
-        volume: 450,
-        technicianName: "Michael Brown",
-      },
-      {
-        id: "7",
-        unitNumber: "BU-007-23",
-        bloodType: "B_NEGATIVE",
-        collectionDate: "2023-06-02",
-        expiryDate: "2023-07-02",
-        status: "AVAILABLE",
-        donorName: "Sophia Martinez",
-        volume: 450,
-        technicianName: "Sarah Williams",
-      },
-      {
-        id: "8",
-        unitNumber: "BU-008-23",
-        bloodType: "AB_NEGATIVE",
-        collectionDate: "2023-05-25",
-        expiryDate: "2023-06-25",
-        status: "AVAILABLE",
-        donorName: "James Taylor",
-        volume: 450,
-        technicianName: "Michael Brown",
-      },
-    ]
-
-    // Simulate API call
-    setTimeout(() => {
-      setBloodUnits(mockBloodUnits)
-      setIsLoading(false)
-    }, 1000)
+    fetchBloodUnits()
   }, [])
+
+  // Add new blood unit
+  const handleAddUnit = async (e) => {
+    e.preventDefault()
+    try {
+      const response = await fetch("/api/blood-units", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newUnit),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to add blood unit")
+      }
+
+      toast({
+        title: "Success",
+        description: "Blood unit added successfully",
+      })
+
+      setIsAddUnitOpen(false)
+      setNewUnit({
+        unitNumber: "",
+        bloodType: "",
+        collectionDate: "",
+        expiryDate: "",
+        volume: 450,
+        donationId: "",
+        status: "AVAILABLE",
+      })
+      fetchBloodUnits()
+    } catch (error) {
+      console.error("Error adding blood unit:", error)
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Delete blood unit
+  const handleDeleteUnit = async (id) => {
+    if (!confirm("Are you sure you want to delete this blood unit?")) return
+
+    try {
+      const response = await fetch(`/api/blood-units/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete blood unit")
+      }
+
+      toast({
+        title: "Success",
+        description: "Blood unit deleted successfully",
+      })
+
+      fetchBloodUnits()
+    } catch (error) {
+      console.error("Error deleting blood unit:", error)
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      })
+    }
+  }
 
   // Helper function to format blood type for display
   const formatBloodType = (type) => {
@@ -140,9 +186,8 @@ export default function InventoryPage() {
   const filteredBloodUnits = bloodUnits.filter((unit) => {
     // Search query filter
     const matchesSearch =
-      unit.unitNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      unit.donorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (unit.patientName && unit.patientName.toLowerCase().includes(searchQuery.toLowerCase()))
+      unit.unitNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (unit.donor?.user?.name && unit.donor.user.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
     // Blood type filter
     const matchesBloodType = bloodTypeFilter ? unit.bloodType === bloodTypeFilter : true
@@ -187,6 +232,14 @@ export default function InventoryPage() {
     }
   }
 
+  // Calculate expiry date (35 days from collection date)
+  const calculateExpiryDate = (collectionDate) => {
+    if (!collectionDate) return ""
+    const date = new Date(collectionDate)
+    date.setDate(date.getDate() + 35) // Blood typically expires after 35 days
+    return date.toISOString().split("T")[0]
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -195,12 +248,120 @@ export default function InventoryPage() {
           <p className="text-muted-foreground">Manage blood units and inventory</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button asChild>
-            <Link href="/dashboard/inventory/add">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Blood Unit
-            </Link>
-          </Button>
+          <Dialog open={isAddUnitOpen} onOpenChange={setIsAddUnitOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Blood Unit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[525px]">
+              <DialogHeader>
+                <DialogTitle>Add New Blood Unit</DialogTitle>
+                <DialogDescription>Enter the details for the new blood unit</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleAddUnit}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="unitNumber">Unit Number</Label>
+                    <Input
+                      id="unitNumber"
+                      value={newUnit.unitNumber}
+                      onChange={(e) => setNewUnit({ ...newUnit, unitNumber: e.target.value })}
+                      placeholder="BU-XXX-23"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="bloodType">Blood Type</Label>
+                      <Select
+                        value={newUnit.bloodType}
+                        onValueChange={(value) => setNewUnit({ ...newUnit, bloodType: value })}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A_POSITIVE">A+</SelectItem>
+                          <SelectItem value="A_NEGATIVE">A-</SelectItem>
+                          <SelectItem value="B_POSITIVE">B+</SelectItem>
+                          <SelectItem value="B_NEGATIVE">B-</SelectItem>
+                          <SelectItem value="AB_POSITIVE">AB+</SelectItem>
+                          <SelectItem value="AB_NEGATIVE">AB-</SelectItem>
+                          <SelectItem value="O_POSITIVE">O+</SelectItem>
+                          <SelectItem value="O_NEGATIVE">O-</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="volume">Volume (ml)</Label>
+                      <Input
+                        id="volume"
+                        type="number"
+                        value={newUnit.volume}
+                        onChange={(e) => setNewUnit({ ...newUnit, volume: Number.parseInt(e.target.value) })}
+                        min="100"
+                        max="500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="collectionDate">Collection Date</Label>
+                      <Input
+                        id="collectionDate"
+                        type="date"
+                        value={newUnit.collectionDate}
+                        onChange={(e) => {
+                          const collectionDate = e.target.value
+                          const expiryDate = calculateExpiryDate(collectionDate)
+                          setNewUnit({
+                            ...newUnit,
+                            collectionDate,
+                            expiryDate,
+                          })
+                        }}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="expiryDate">Expiry Date</Label>
+                      <Input
+                        id="expiryDate"
+                        type="date"
+                        value={newUnit.expiryDate}
+                        onChange={(e) => setNewUnit({ ...newUnit, expiryDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={newUnit.status}
+                      onValueChange={(value) => setNewUnit({ ...newUnit, status: value })}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AVAILABLE">Available</SelectItem>
+                        <SelectItem value="RESERVED">Reserved</SelectItem>
+                        <SelectItem value="DISCARDED">Discarded</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Add Blood Unit</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
           <Button variant="outline">
             <Download className="mr-2 h-4 w-4" />
             Export
@@ -249,7 +410,7 @@ export default function InventoryPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Types</SelectItem>
+                <SelectItem value="">All Types</SelectItem>
                 <SelectItem value="A_POSITIVE">A+</SelectItem>
                 <SelectItem value="A_NEGATIVE">A-</SelectItem>
                 <SelectItem value="B_POSITIVE">B+</SelectItem>
@@ -336,11 +497,16 @@ export default function InventoryPage() {
                           <TableCell>
                             <Badge variant={getStatusBadgeVariant(unit.status)}>{unit.status}</Badge>
                           </TableCell>
-                          <TableCell>{unit.donorName}</TableCell>
+                          <TableCell>{unit.donor?.user?.name || "N/A"}</TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/dashboard/inventory/${unit.id}`}>View</Link>
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/dashboard/inventory/${unit.id}`}>View</Link>
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteUnit(unit.id)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -404,7 +570,7 @@ export default function InventoryPage() {
                               {isExpiringSoon(unit) && <AlertTriangle className="h-4 w-4 text-amber-500" />}
                             </div>
                           </TableCell>
-                          <TableCell>{unit.donorName}</TableCell>
+                          <TableCell>{unit.donor?.user?.name || "N/A"}</TableCell>
                           <TableCell className="text-right">
                             <Button size="sm" asChild>
                               <Link href={`/dashboard/inventory/${unit.id}/allocate`}>Allocate</Link>

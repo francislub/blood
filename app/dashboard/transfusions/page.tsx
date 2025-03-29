@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,82 +21,68 @@ import {
   Activity,
   FileText,
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+interface Transfusion {
+  id: string
+  patientId: string
+  patient: {
+    id: string
+    name: string
+  }
+  bloodType: string
+  units: number
+  status: string
+  date: string
+  doctor: string
+  technician?: {
+    id: string
+    user: {
+      name: string
+    }
+  }
+  requestId: string
+  notes?: string
+}
 
 export default function TransfusionsPage() {
+  const [transfusions, setTransfusions] = useState<Transfusion[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const { toast } = useToast()
 
-  // Mock data for transfusions
-  const transfusions = [
-    {
-      id: "T1001",
-      patientId: "P12345",
-      patientName: "John Doe",
-      bloodType: "A_POSITIVE",
-      units: 2,
-      status: "COMPLETED",
-      date: "2023-06-10T14:30:00Z",
-      doctor: "Dr. James Mwakasege",
-      technician: "Nurse Mary Mushi",
-      requestId: "BR-001-23",
-      notes: "Transfusion completed without complications",
-    },
-    {
-      id: "T1002",
-      patientId: "P12350",
-      patientName: "Sarah Williams",
-      bloodType: "A_NEGATIVE",
-      units: 3,
-      status: "COMPLETED",
-      date: "2023-06-07T16:45:00Z",
-      doctor: "Dr. James Mwakasege",
-      technician: "Nurse Mary Mushi",
-      requestId: "BR-003-23",
-      notes: "Patient showed improvement after transfusion",
-    },
-    {
-      id: "T1003",
-      patientId: "P12347",
-      patientName: "Robert Johnson",
-      bloodType: "B_POSITIVE",
-      units: 1,
-      status: "SCHEDULED",
-      date: "2023-06-11T09:00:00Z",
-      doctor: "Dr. James Mwakasege",
-      requestId: "BR-002-23",
-    },
-    {
-      id: "T1004",
-      patientId: "P12348",
-      patientName: "Emily Davis",
-      bloodType: "AB_POSITIVE",
-      units: 2,
-      status: "SCHEDULED",
-      date: "2023-06-12T11:30:00Z",
-      doctor: "Dr. Sarah Kimaro",
-      requestId: "BR-004-23",
-    },
-    {
-      id: "T1005",
-      patientId: "P12352",
-      patientName: "Michael Brown",
-      bloodType: "O_POSITIVE",
-      units: 2,
-      status: "CANCELLED",
-      date: "2023-06-09T10:15:00Z",
-      doctor: "Dr. Emily Davis",
-      requestId: "BR-006-23",
-      notes: "Patient condition improved, transfusion no longer needed",
-    },
-  ]
+  useEffect(() => {
+    const fetchTransfusions = async () => {
+      try {
+        const response = await fetch("/api/transfusions")
+        if (!response.ok) {
+          throw new Error("Failed to fetch transfusions")
+        }
+        const data = await response.json()
+        setTransfusions(data)
+      } catch (error) {
+        console.error("Error fetching transfusions:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load transfusion data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchTransfusions()
+  }, [toast])
 
   // Filter transfusions based on search query and filters
   const filteredTransfusions = transfusions.filter((transfusion) => {
     // Search query filter
     const matchesSearch =
       transfusion.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transfusion.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transfusion.patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       transfusion.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (transfusion.notes && transfusion.notes.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -189,7 +175,7 @@ export default function TransfusionsPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Types</SelectItem>
+                <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="A_POSITIVE">A+</SelectItem>
                 <SelectItem value="A_NEGATIVE">A-</SelectItem>
                 <SelectItem value="B_POSITIVE">B+</SelectItem>
@@ -208,7 +194,7 @@ export default function TransfusionsPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
                 <SelectItem value="SCHEDULED">Scheduled</SelectItem>
                 <SelectItem value="CANCELLED">Cancelled</SelectItem>
@@ -220,68 +206,74 @@ export default function TransfusionsPage() {
         <TabsContent value="all" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Transfusion ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransfusions.length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center">
-                        No transfusions found.
-                      </TableCell>
+                      <TableHead>Transfusion ID</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Doctor</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredTransfusions.map((transfusion) => (
-                      <TableRow key={transfusion.id}>
-                        <TableCell className="font-medium">{transfusion.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{transfusion.patientName}</div>
-                              <div className="text-xs text-muted-foreground">{transfusion.patientId}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(transfusion.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{transfusion.units} units</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {getStatusIcon(transfusion.status)}
-                            <Badge variant={getStatusBadgeVariant(transfusion.status)}>{transfusion.status}</Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(transfusion.date)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{transfusion.doctor}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/transfusions/${transfusion.id}`}>View</Link>
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransfusions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-24 text-center">
+                          No transfusions found.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      filteredTransfusions.map((transfusion) => (
+                        <TableRow key={transfusion.id}>
+                          <TableCell className="font-medium">{transfusion.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{transfusion.patient.name}</div>
+                                <div className="text-xs text-muted-foreground">{transfusion.patientId}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(transfusion.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{transfusion.units} units</TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              {getStatusIcon(transfusion.status)}
+                              <Badge variant={getStatusBadgeVariant(transfusion.status)}>{transfusion.status}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(transfusion.date)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{transfusion.doctor}</TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/dashboard/transfusions/${transfusion.id}`}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -293,57 +285,63 @@ export default function TransfusionsPage() {
               <CardDescription>Successfully completed blood transfusions</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Transfusion ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead>Technician</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransfusions
-                    .filter((transfusion) => transfusion.status === "COMPLETED")
-                    .map((transfusion) => (
-                      <TableRow key={transfusion.id}>
-                        <TableCell className="font-medium">{transfusion.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{transfusion.patientName}</div>
-                              <div className="text-xs text-muted-foreground">{transfusion.patientId}</div>
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Transfusion ID</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Doctor</TableHead>
+                      <TableHead>Technician</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransfusions
+                      .filter((transfusion) => transfusion.status === "COMPLETED")
+                      .map((transfusion) => (
+                        <TableRow key={transfusion.id}>
+                          <TableCell className="font-medium">{transfusion.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{transfusion.patient.name}</div>
+                                <div className="text-xs text-muted-foreground">{transfusion.patientId}</div>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(transfusion.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{transfusion.units} units</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(transfusion.date)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{transfusion.doctor}</TableCell>
-                        <TableCell>{transfusion.technician}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/transfusions/${transfusion.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(transfusion.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{transfusion.units} units</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(transfusion.date)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{transfusion.doctor}</TableCell>
+                          <TableCell>{transfusion.technician?.user.name || "N/A"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/dashboard/transfusions/${transfusion.id}`}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -355,7 +353,11 @@ export default function TransfusionsPage() {
               <CardDescription>Upcoming blood transfusions</CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredTransfusions.filter((transfusion) => transfusion.status === "SCHEDULED").length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : filteredTransfusions.filter((transfusion) => transfusion.status === "SCHEDULED").length === 0 ? (
                 <div className="flex h-24 items-center justify-center text-muted-foreground">
                   No scheduled transfusions at this time.
                 </div>
@@ -369,7 +371,7 @@ export default function TransfusionsPage() {
                           <div className="flex items-center gap-2">
                             <Activity className="h-5 w-5 text-primary" />
                             <div className="font-medium">
-                              {transfusion.id} - {transfusion.patientName}
+                              {transfusion.id} - {transfusion.patient.name}
                             </div>
                             <Badge variant="warning">SCHEDULED</Badge>
                           </div>

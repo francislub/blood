@@ -1,9 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -29,6 +27,27 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
+
+interface ProfileData {
+  user: {
+    name: string
+    email: string
+  }
+  phoneNumber: string
+  address: string
+  donor?: {
+    bloodType: string
+    gender: string
+    dateOfBirth: string
+    weight: string
+    height: string
+    medicalHistory: string
+    lastDonation: string | null
+    eligibleDate: string | null
+    totalDonations: number
+  }
+}
 
 export default function ProfilePage() {
   const { data: session } = useSession()
@@ -36,6 +55,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const { toast } = useToast()
 
   // Personal information
   const [name, setName] = useState("")
@@ -60,34 +80,53 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("")
 
   useEffect(() => {
-    if (session?.user) {
-      // In a real application, you would fetch this data from your API
-      // This is just mock data for demonstration
-      setName(session.user.name || "")
-      setEmail(session.user.email || "")
+    const fetchProfileData = async () => {
+      if (!session?.user?.id) return
 
-      // Simulate API call to get user profile
-      setTimeout(() => {
-        // Mock data
-        setPhoneNumber("+255 123 456 789")
-        setAddress("123 Main St, Nyamagana, Mwanza")
+      try {
+        setIsLoading(true)
+        const response = await fetch(`/api/users/${session.user.id}/profile`)
 
-        if (session.user.role === "DONOR") {
-          setBloodType("A_POSITIVE")
-          setGender("Male")
-          setDateOfBirth(new Date(1990, 0, 15))
-          setWeight("75")
-          setHeight("175")
-          setMedicalHistory("No known medical conditions")
-          setLastDonation("2023-03-15")
-          setEligibleDate("2023-05-10")
-          setTotalDonations(5)
+        if (!response.ok) {
+          throw new Error("Failed to fetch profile data")
         }
 
+        const data: ProfileData = await response.json()
+
+        // Set user data
+        setName(data.user.name || "")
+        setEmail(data.user.email || "")
+        setPhoneNumber(data.phoneNumber || "")
+        setAddress(data.address || "")
+
+        // Set donor data if available
+        if (data.donor) {
+          setBloodType(data.donor.bloodType || "")
+          setGender(data.donor.gender || "")
+          setDateOfBirth(data.donor.dateOfBirth ? new Date(data.donor.dateOfBirth) : undefined)
+          setWeight(data.donor.weight || "")
+          setHeight(data.donor.height || "")
+          setMedicalHistory(data.donor.medicalHistory || "")
+          setLastDonation(data.donor.lastDonation)
+          setEligibleDate(data.donor.eligibleDate)
+          setTotalDonations(data.donor.totalDonations || 0)
+        }
+      } catch (error) {
+        console.error("Error fetching profile data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load profile data",
+          variant: "destructive",
+        })
+      } finally {
         setIsLoading(false)
-      }, 1000)
+      }
     }
-  }, [session])
+
+    if (session?.user) {
+      fetchProfileData()
+    }
+  }, [session, toast])
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,14 +135,47 @@ export default function ProfilePage() {
     setSuccess("")
 
     try {
-      // In a real application, you would send this data to your API
-      // This is just a simulation
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch(`/api/users/${session?.user?.id}/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          phoneNumber,
+          address,
+          donor:
+            session?.user?.role === "DONOR"
+              ? {
+                  gender,
+                  dateOfBirth: dateOfBirth?.toISOString(),
+                  weight,
+                  height,
+                  medicalHistory,
+                }
+              : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to update profile")
+      }
 
       setSuccess("Profile updated successfully")
-      setIsSaving(false)
+      toast({
+        title: "Success",
+        description: "Profile information has been updated",
+      })
     } catch (error) {
+      console.error("Error updating profile:", error)
       setError("Failed to update profile. Please try again.")
+      toast({
+        title: "Error",
+        description: "Failed to update profile information",
+        variant: "destructive",
+      })
+    } finally {
       setIsSaving(false)
     }
   }
@@ -121,17 +193,40 @@ export default function ProfilePage() {
     }
 
     try {
-      // In a real application, you would send this data to your API
-      // This is just a simulation
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch(`/api/users/${session?.user?.id}/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to change password")
+      }
 
       setSuccess("Password changed successfully")
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
-      setIsSaving(false)
+
+      toast({
+        title: "Success",
+        description: "Your password has been changed",
+      })
     } catch (error) {
-      setError("Failed to change password. Please try again.")
+      console.error("Error changing password:", error)
+      setError("Failed to change password. Please check your current password and try again.")
+      toast({
+        title: "Error",
+        description: "Failed to change password",
+        variant: "destructive",
+      })
+    } finally {
       setIsSaving(false)
     }
   }
@@ -394,6 +489,7 @@ export default function ProfilePage() {
                       <Input
                         id="weight"
                         type="number"
+                        step="0.1"
                         placeholder="70"
                         value={weight}
                         onChange={(e) => setWeight(e.target.value)}

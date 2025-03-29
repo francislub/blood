@@ -230,11 +230,14 @@ export default function DonorRegistrationForm() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {bloodTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="A_POSITIVE">A+</SelectItem>
+                      <SelectItem value="A_NEGATIVE">A-</SelectItem>
+                      <SelectItem value="B_POSITIVE">B+</SelectItem>
+                      <SelectItem value="B_NEGATIVE">B-</SelectItem>
+                      <SelectItem value="AB_POSITIVE">AB+</SelectItem>
+                      <SelectItem value="AB_NEGATIVE">AB-</SelectItem>
+                      <SelectItem value="O_POSITIVE">O+</SelectItem>
+                      <SelectItem value="O_NEGATIVE">O-</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

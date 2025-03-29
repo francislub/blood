@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,75 +31,156 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
+
+interface Patient {
+  id: string
+  name: string
+}
+
+interface MedicalRecord {
+  id: string
+  patientId: string
+  patient: {
+    id: string
+    name: string
+  }
+  recordType: string
+  date: string
+  title: string
+  summary: string
+  doctorName: string
+  relatedItems?: string[]
+}
 
 export default function MedicalRecordsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [recordTypeFilter, setRecordTypeFilter] = useState("")
   const [isAddRecordOpen, setIsAddRecordOpen] = useState(false)
+  const [records, setRecords] = useState<MedicalRecord[]>([])
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [recordForm, setRecordForm] = useState({
+    patientId: "",
+    recordType: "",
+    title: "",
+    summary: "",
+    details: "",
+    relatedItems: "",
+  })
+  const { toast } = useToast()
 
-  // Mock data for medical records
-  const records = [
-    {
-      id: "MR-001-23",
-      patientId: "P12345",
-      patientName: "John Doe",
-      recordType: "TRANSFUSION",
-      date: "2023-06-10T14:30:00Z",
-      title: "Blood Transfusion Record",
-      summary: "Patient received 2 units of A+ blood for anemia treatment",
-      doctorName: "Dr. James Mwakasege",
-      relatedItems: ["T1001", "BR-001-23"],
-    },
-    {
-      id: "MR-002-23",
-      patientId: "P12350",
-      patientName: "Sarah Williams",
-      recordType: "TRANSFUSION",
-      date: "2023-06-07T16:45:00Z",
-      title: "Blood Transfusion Record",
-      summary: "Patient received 3 units of A- blood for sickle cell crisis",
-      doctorName: "Dr. James Mwakasege",
-      relatedItems: ["T1002", "BR-003-23"],
-    },
-    {
-      id: "MR-003-23",
-      patientId: "P12345",
-      patientName: "John Doe",
-      recordType: "DIAGNOSIS",
-      date: "2023-06-01T10:15:00Z",
-      title: "Anemia Diagnosis",
-      summary: "Patient diagnosed with iron deficiency anemia. Hemoglobin 6.5 g/dL",
-      doctorName: "Dr. James Mwakasege",
-    },
-    {
-      id: "MR-004-23",
-      patientId: "P12347",
-      patientName: "Robert Johnson",
-      recordType: "DIAGNOSIS",
-      date: "2023-06-05T11:30:00Z",
-      title: "Gastrointestinal Bleeding Diagnosis",
-      summary: "Patient diagnosed with upper GI bleeding. Hemoglobin 8.2 g/dL",
-      doctorName: "Dr. James Mwakasege",
-    },
-    {
-      id: "MR-005-23",
-      patientId: "P12350",
-      patientName: "Sarah Williams",
-      recordType: "FOLLOW_UP",
-      date: "2023-06-12T09:00:00Z",
-      title: "Post-Transfusion Follow-up",
-      summary: "Patient showing improvement after transfusion. Hemoglobin increased to 9.8 g/dL",
-      doctorName: "Dr. Emily Davis",
-    },
-  ]
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true)
+
+        // Fetch medical records
+        const recordsResponse = await fetch("/api/medical-records")
+        if (!recordsResponse.ok) {
+          throw new Error("Failed to fetch medical records")
+        }
+        const recordsData = await recordsResponse.json()
+        setRecords(recordsData)
+
+        // Fetch patients for the form
+        const patientsResponse = await fetch("/api/patients")
+        if (!patientsResponse.ok) {
+          throw new Error("Failed to fetch patients")
+        }
+        const patientsData = await patientsResponse.json()
+        setPatients(patientsData)
+      } catch (error) {
+        console.error("Error fetching data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load medical records",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [toast])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target
+    setRecordForm((prev) => ({ ...prev, [id]: value }))
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
+    setRecordForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSubmitRecord = async () => {
+    try {
+      if (!recordForm.patientId || !recordForm.recordType || !recordForm.title) {
+        toast({
+          title: "Error",
+          description: "Please fill in all required fields",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch("/api/medical-records", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          patientId: recordForm.patientId,
+          recordType: recordForm.recordType,
+          title: recordForm.title,
+          summary: recordForm.summary,
+          details: recordForm.details,
+          relatedItems: recordForm.relatedItems ? recordForm.relatedItems.split(",").map((item) => item.trim()) : [],
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to add medical record")
+      }
+
+      toast({
+        title: "Success",
+        description: "Medical record has been added",
+      })
+
+      // Reset form and close dialog
+      setRecordForm({
+        patientId: "",
+        recordType: "",
+        title: "",
+        summary: "",
+        details: "",
+        relatedItems: "",
+      })
+      setIsAddRecordOpen(false)
+
+      // Refresh data
+      const recordsResponse = await fetch("/api/medical-records")
+      const recordsData = await recordsResponse.json()
+      setRecords(recordsData)
+    } catch (error) {
+      console.error("Error adding medical record:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add medical record",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Filter records based on search query and filters
   const filteredRecords = records.filter((record) => {
     // Search query filter
     const matchesSearch =
       record.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      record.patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.summary.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -109,8 +192,7 @@ export default function MedicalRecordsPage() {
 
   // Format date for display
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
+    return new Date(dateString).toLocaleString()
   }
 
   // Get badge variant based on record type
@@ -154,22 +236,30 @@ export default function MedicalRecordsPage() {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="patient-id">Patient</Label>
-                  <Select>
+                  <Label htmlFor="patientId">Patient</Label>
+                  <Select
+                    value={recordForm.patientId}
+                    onValueChange={(value) => handleSelectChange("patientId", value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select patient" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="P12345">P12345 - John Doe</SelectItem>
-                      <SelectItem value="P12347">P12347 - Robert Johnson</SelectItem>
-                      <SelectItem value="P12350">P12350 - Sarah Williams</SelectItem>
+                      {patients.map((patient) => (
+                        <SelectItem key={patient.id} value={patient.id}>
+                          {patient.id} - {patient.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="record-type">Record Type</Label>
-                  <Select>
+                  <Label htmlFor="recordType">Record Type</Label>
+                  <Select
+                    value={recordForm.recordType}
+                    onValueChange={(value) => handleSelectChange("recordType", value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select record type" />
                     </SelectTrigger>
@@ -185,22 +275,38 @@ export default function MedicalRecordsPage() {
 
                 <div className="grid gap-2">
                   <Label htmlFor="title">Title</Label>
-                  <Input id="title" placeholder="Record title" />
+                  <Input id="title" placeholder="Record title" value={recordForm.title} onChange={handleInputChange} />
                 </div>
 
                 <div className="grid gap-2">
                   <Label htmlFor="summary">Summary</Label>
-                  <Textarea id="summary" placeholder="Brief summary of the medical record..." />
+                  <Textarea
+                    id="summary"
+                    placeholder="Brief summary of the medical record..."
+                    value={recordForm.summary}
+                    onChange={handleInputChange}
+                  />
                 </div>
 
                 <div className="grid gap-2">
                   <Label htmlFor="details">Detailed Notes</Label>
-                  <Textarea id="details" placeholder="Detailed medical notes..." className="min-h-[100px]" />
+                  <Textarea
+                    id="details"
+                    placeholder="Detailed medical notes..."
+                    className="min-h-[100px]"
+                    value={recordForm.details}
+                    onChange={handleInputChange}
+                  />
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="related-items">Related Items (Optional)</Label>
-                  <Input id="related-items" placeholder="Comma-separated IDs (e.g., T1001, BR-001-23)" />
+                  <Label htmlFor="relatedItems">Related Items (Optional)</Label>
+                  <Input
+                    id="relatedItems"
+                    placeholder="Comma-separated IDs (e.g., T1001, BR-001-23)"
+                    value={recordForm.relatedItems}
+                    onChange={handleInputChange}
+                  />
                   <p className="text-xs text-muted-foreground">
                     Enter IDs of related transfusions, blood requests, etc.
                   </p>
@@ -210,7 +316,7 @@ export default function MedicalRecordsPage() {
                 <Button variant="outline" onClick={() => setIsAddRecordOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => setIsAddRecordOpen(false)}>Save Record</Button>
+                <Button onClick={handleSubmitRecord}>Save Record</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -248,252 +354,264 @@ export default function MedicalRecordsPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="">All Types</SelectItem>
                 <SelectItem value="TRANSFUSION">Transfusion</SelectItem>
                 <SelectItem value="DIAGNOSIS">Diagnosis</SelectItem>
                 <SelectItem value="FOLLOW_UP">Follow-up</SelectItem>
+                <SelectItem value="TREATMENT">Treatment</SelectItem>
+                <SelectItem value="LAB_RESULT">Lab Result</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        <TabsContent value="all" className="mt-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Record ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        No records found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRecords.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">{record.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{record.patientName}</div>
-                              <div className="text-xs text-muted-foreground">{record.patientId}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getRecordTypeBadgeVariant(record.recordType)}>
-                            {formatRecordType(record.recordType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{record.title}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(record.date)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{record.doctorName}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/medical-records/${record.id}`}>View Record</Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/medical-records/${record.id}/edit`}>Edit Record</Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/patients/${record.patientId}`}>View Patient</Link>
-                              </DropdownMenuItem>
-                              {record.recordType === "TRANSFUSION" && record.relatedItems && (
-                                <>
+        {isLoading ? (
+          <div className="mt-4 flex h-64 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          </div>
+        ) : (
+          <>
+            <TabsContent value="all" className="mt-4">
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Record ID</TableHead>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Doctor</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-24 text-center">
+                            No records found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredRecords.map((record) => (
+                          <TableRow key={record.id}>
+                            <TableCell className="font-medium">{record.id}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <div>{record.patient.name}</div>
+                                  <div className="text-xs text-muted-foreground">{record.patientId}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={getRecordTypeBadgeVariant(record.recordType)}>
+                                {formatRecordType(record.recordType)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{record.title}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                {formatDate(record.date)}
+                              </div>
+                            </TableCell>
+                            <TableCell>{record.doctorName}</TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Open menu</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/dashboard/medical-records/${record.id}`}>View Record</Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/dashboard/medical-records/${record.id}/edit`}>Edit Record</Link>
+                                  </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem asChild>
-                                    <Link href={`/dashboard/transfusions/${record.relatedItems[0]}`}>
-                                      View Transfusion
-                                    </Link>
+                                    <Link href={`/dashboard/patients/${record.patientId}`}>View Patient</Link>
                                   </DropdownMenuItem>
-                                </>
+                                  {record.recordType === "TRANSFUSION" &&
+                                    record.relatedItems &&
+                                    record.relatedItems.length > 0 && (
+                                      <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem asChild>
+                                          <Link href={`/dashboard/transfusions/${record.relatedItems[0]}`}>
+                                            View Transfusion
+                                          </Link>
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="transfusions" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Transfusion Records</CardTitle>
+                  <CardDescription>Medical records related to blood transfusions</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Record ID</TableHead>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Summary</TableHead>
+                        <TableHead>Related Items</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords
+                        .filter((record) => record.recordType === "TRANSFUSION")
+                        .map((record) => (
+                          <TableRow key={record.id}>
+                            <TableCell className="font-medium">{record.id}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                {record.patient.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>{formatDate(record.date)}</TableCell>
+                            <TableCell>{record.summary}</TableCell>
+                            <TableCell>
+                              {record.relatedItems && (
+                                <div className="flex flex-wrap gap-1">
+                                  {record.relatedItems.map((item, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      {item}
+                                    </Badge>
+                                  ))}
+                                </div>
                               )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="transfusions" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Transfusion Records</CardTitle>
-              <CardDescription>Medical records related to blood transfusions</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Record ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead>Related Items</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords
-                    .filter((record) => record.recordType === "TRANSFUSION")
-                    .map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">{record.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {record.patientName}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>{record.summary}</TableCell>
-                        <TableCell>
-                          {record.relatedItems && (
-                            <div className="flex flex-wrap gap-1">
-                              {record.relatedItems.map((item, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {item}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
+            <TabsContent value="diagnoses" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Diagnosis Records</CardTitle>
+                  <CardDescription>Medical records related to patient diagnoses</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Record ID</TableHead>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Summary</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords
+                        .filter((record) => record.recordType === "DIAGNOSIS")
+                        .map((record) => (
+                          <TableRow key={record.id}>
+                            <TableCell className="font-medium">{record.id}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                {record.patient.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>{formatDate(record.date)}</TableCell>
+                            <TableCell>{record.title}</TableCell>
+                            <TableCell>{record.summary}</TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="diagnoses" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Diagnosis Records</CardTitle>
-              <CardDescription>Medical records related to patient diagnoses</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Record ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords
-                    .filter((record) => record.recordType === "DIAGNOSIS")
-                    .map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">{record.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {record.patientName}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>{record.title}</TableCell>
-                        <TableCell>{record.summary}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
+            <TabsContent value="follow-ups" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Follow-up Records</CardTitle>
+                  <CardDescription>Medical records related to patient follow-ups</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Record ID</TableHead>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Summary</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="follow-ups" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Follow-up Records</CardTitle>
-              <CardDescription>Medical records related to patient follow-ups</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Record ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords
-                    .filter((record) => record.recordType === "FOLLOW_UP")
-                    .map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-medium">{record.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {record.patientName}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatDate(record.date)}</TableCell>
-                        <TableCell>{record.title}</TableCell>
-                        <TableCell>{record.summary}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRecords
+                        .filter((record) => record.recordType === "FOLLOW_UP")
+                        .map((record) => (
+                          <TableRow key={record.id}>
+                            <TableCell className="font-medium">{record.id}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                {record.patient.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>{formatDate(record.date)}</TableCell>
+                            <TableCell>{record.title}</TableCell>
+                            <TableCell>{record.summary}</TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/dashboard/medical-records/${record.id}`}>View</Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   )

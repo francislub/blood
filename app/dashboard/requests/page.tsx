@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,86 +22,64 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+interface BloodRequest {
+  id: string
+  patientId: string
+  patient: {
+    id: string
+    name: string
+  }
+  bloodType: string
+  units: number
+  priority: string
+  status: string
+  requestDate: string
+  requester: string
+  approver?: string
+  reason: string
+  notes?: string
+}
 
 export default function BloodRequestsPage() {
+  const [requests, setRequests] = useState<BloodRequest[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const { toast } = useToast()
 
-  // Mock data for blood requests
-  const requests = [
-    {
-      id: "BR-001-23",
-      patientId: "P12345",
-      patientName: "John Doe",
-      bloodType: "A_POSITIVE",
-      units: 2,
-      priority: "EMERGENCY",
-      status: "APPROVED",
-      requestDate: "2023-06-10T08:30:00Z",
-      requester: "Dr. James Mwakasege",
-      approver: "Dr. Sarah Kimaro",
-      reason: "Anemia, Hb 6.5 g/dL",
-    },
-    {
-      id: "BR-002-23",
-      patientId: "P12347",
-      patientName: "Robert Johnson",
-      bloodType: "B_POSITIVE",
-      units: 1,
-      priority: "URGENT",
-      status: "PENDING",
-      requestDate: "2023-06-10T10:15:00Z",
-      requester: "Dr. James Mwakasege",
-      reason: "Gastrointestinal bleeding",
-    },
-    {
-      id: "BR-003-23",
-      patientId: "P12350",
-      patientName: "Sarah Williams",
-      bloodType: "A_NEGATIVE",
-      units: 3,
-      priority: "URGENT",
-      status: "APPROVED",
-      requestDate: "2023-06-07T14:45:00Z",
-      requester: "Dr. James Mwakasege",
-      approver: "Dr. Sarah Kimaro",
-      reason: "Sickle cell crisis",
-    },
-    {
-      id: "BR-004-23",
-      patientId: "P12348",
-      patientName: "Emily Davis",
-      bloodType: "AB_POSITIVE",
-      units: 2,
-      priority: "STANDARD",
-      status: "PENDING",
-      requestDate: "2023-06-09T09:20:00Z",
-      requester: "Dr. Sarah Kimaro",
-      reason: "Pregnancy complications, scheduled C-section",
-    },
-    {
-      id: "BR-005-23",
-      patientId: "P12351",
-      patientName: "David Wilson",
-      bloodType: "O_NEGATIVE",
-      units: 2,
-      priority: "EMERGENCY",
-      status: "REJECTED",
-      requestDate: "2023-06-08T16:10:00Z",
-      requester: "Dr. Emily Davis",
-      approver: "Dr. Sarah Kimaro",
-      reason: "Trauma, insufficient inventory",
-      notes: "Redirected to Regional Blood Center",
-    },
-  ]
+  useEffect(() => {
+    const fetchRequests = async () => {
+      try {
+        const response = await fetch("/api/blood-requests")
+        if (!response.ok) {
+          throw new Error("Failed to fetch blood requests")
+        }
+        const data = await response.json()
+        setRequests(data)
+      } catch (error) {
+        console.error("Error fetching blood requests:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load blood request data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchRequests()
+  }, [toast])
 
   // Filter requests based on search query and filters
   const filteredRequests = requests.filter((request) => {
     // Search query filter
     const matchesSearch =
       request.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      request.patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.reason.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -245,70 +223,76 @@ export default function BloodRequestsPage() {
         <TabsContent value="all" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Request ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRequests.length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center">
-                        No requests found.
-                      </TableCell>
+                      <TableHead>Request ID</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredRequests.map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell className="font-medium">{request.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{request.patientName}</div>
-                              <div className="text-xs text-muted-foreground">{request.patientId}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(request.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{request.units} units</TableCell>
-                        <TableCell>
-                          <Badge variant={getPriorityBadgeVariant(request.priority)}>{request.priority}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {getStatusIcon(request.status)}
-                            <Badge variant={getStatusBadgeVariant(request.status)}>{request.status}</Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(request.requestDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/requests/${request.id}`}>View</Link>
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-24 text-center">
+                          No requests found.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      filteredRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell className="font-medium">{request.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{request.patient.name}</div>
+                                <div className="text-xs text-muted-foreground">{request.patientId}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(request.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{request.units} units</TableCell>
+                          <TableCell>
+                            <Badge variant={getPriorityBadgeVariant(request.priority)}>{request.priority}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              {getStatusIcon(request.status)}
+                              <Badge variant={getStatusBadgeVariant(request.status)}>{request.status}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(request.requestDate)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/dashboard/requests/${request.id}`}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -320,64 +304,70 @@ export default function BloodRequestsPage() {
               <CardDescription>Blood requests awaiting approval</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Request ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Requester</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRequests
-                    .filter((request) => request.status === "PENDING")
-                    .map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell className="font-medium">{request.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{request.patientName}</div>
-                              <div className="text-xs text-muted-foreground">{request.patientId}</div>
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Request ID</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Requester</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests
+                      .filter((request) => request.status === "PENDING")
+                      .map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell className="font-medium">{request.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{request.patient.name}</div>
+                                <div className="text-xs text-muted-foreground">{request.patientId}</div>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(request.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{request.units} units</TableCell>
-                        <TableCell>
-                          <Badge variant={getPriorityBadgeVariant(request.priority)}>{request.priority}</Badge>
-                        </TableCell>
-                        <TableCell>{request.requester}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(request.requestDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" asChild>
-                              <Link href={`/dashboard/requests/${request.id}/process`}>Process</Link>
-                            </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/dashboard/requests/${request.id}`}>View</Link>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(request.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{request.units} units</TableCell>
+                          <TableCell>
+                            <Badge variant={getPriorityBadgeVariant(request.priority)}>{request.priority}</Badge>
+                          </TableCell>
+                          <TableCell>{request.requester}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(request.requestDate)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" asChild>
+                                <Link href={`/dashboard/requests/${request.id}/process`}>Process</Link>
+                              </Button>
+                              <Button variant="outline" size="sm" asChild>
+                                <Link href={`/dashboard/requests/${request.id}`}>View</Link>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -389,7 +379,11 @@ export default function BloodRequestsPage() {
               <CardDescription>High priority blood requests</CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredRequests.filter((request) => request.priority === "EMERGENCY").length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : filteredRequests.filter((request) => request.priority === "EMERGENCY").length === 0 ? (
                 <div className="flex h-24 items-center justify-center text-muted-foreground">
                   No emergency requests at this time.
                 </div>
@@ -403,7 +397,7 @@ export default function BloodRequestsPage() {
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5 text-red-500" />
                             <div className="font-medium">
-                              {request.id} - {request.patientName}
+                              {request.id} - {request.patient.name}
                             </div>
                             <Badge variant="destructive">EMERGENCY</Badge>
                           </div>

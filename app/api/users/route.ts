@@ -42,56 +42,61 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await hash(password, 10)
 
     // Create user transaction with role-specific data
-    const user = await prisma.$transaction(async (tx) => {
-      // Create base user
-      const newUser = await tx.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword,
-          role,
-          phoneNumber,
-          address,
-        },
-      })
+    const user = await prisma.$transaction(
+      async (tx) => {
+        // Create base user
+        const newUser = await tx.user.create({
+          data: {
+            name,
+            email,
+            password: hashedPassword,
+            role,
+            phoneNumber,
+            address,
+          },
+        })
 
-      // Create role-specific profile
-      if (role === "DONOR" && roleSpecificData.donor) {
-        await tx.donor.create({
-          data: {
-            userId: newUser.id,
-            bloodType: roleSpecificData.donor.bloodType,
-            dateOfBirth: new Date(roleSpecificData.donor.dateOfBirth),
-            gender: roleSpecificData.donor.gender,
-            weight: roleSpecificData.donor.weight,
-            height: roleSpecificData.donor.height,
-            medicalHistory: roleSpecificData.donor.medicalHistory || "",
-          },
-        })
-      } else if (role === "MEDICAL_OFFICER" && roleSpecificData.medicalOfficer) {
-        await tx.medicalOfficer.create({
-          data: {
-            userId: newUser.id,
-            licenseNumber: roleSpecificData.medicalOfficer.licenseNumber,
-            department: roleSpecificData.medicalOfficer.department,
-            position: roleSpecificData.medicalOfficer.position,
-          },
-        })
-      } else if (role === "BLOOD_BANK_TECHNICIAN" && roleSpecificData.technician) {
-        await tx.bloodBankTechnician.create({
-          data: {
-            userId: newUser.id,
-            employeeId: roleSpecificData.technician.employeeId,
-            specialization: roleSpecificData.technician.specialization,
-          },
-        })
-      } else if (role === "ADMIN" && roleSpecificData.admin) {
-        // For admin, we might not have a specific table, but we could add one if needed
-        // For now, just creating the user with ADMIN role is sufficient
-      }
+        // Create role-specific profile
+        if (role === "DONOR" && roleSpecificData.donor) {
+          await tx.donor.create({
+            data: {
+              userId: newUser.id,
+              bloodType: roleSpecificData.donor.bloodType,
+              dateOfBirth: new Date(roleSpecificData.donor.dateOfBirth),
+              gender: roleSpecificData.donor.gender,
+              weight: roleSpecificData.donor.weight,
+              height: roleSpecificData.donor.height,
+              medicalHistory: roleSpecificData.donor.medicalHistory || "",
+            },
+          })
+        } else if (role === "MEDICAL_OFFICER" && roleSpecificData.medicalOfficer) {
+          await tx.medicalOfficer.create({
+            data: {
+              userId: newUser.id,
+              licenseNumber: roleSpecificData.medicalOfficer.licenseNumber,
+              department: roleSpecificData.medicalOfficer.department,
+              position: roleSpecificData.medicalOfficer.position,
+            },
+          })
+        } else if (role === "BLOOD_BANK_TECHNICIAN" && roleSpecificData.technician) {
+          await tx.bloodBankTechnician.create({
+            data: {
+              userId: newUser.id,
+              employeeId: roleSpecificData.technician.employeeId,
+              specialization: roleSpecificData.technician.specialization,
+            },
+          })
+        } else if (role === "ADMIN" && roleSpecificData.admin) {
+          // For admin, we might not have a specific table, but we could add one if needed
+          // For now, just creating the user with ADMIN role is sufficient
+        }
 
-      return newUser
-    })
+        return newUser
+      },
+      {
+        timeout: 10000, // Increase timeout to 10 seconds
+      },
+    )
 
     // Return the created user without password
     const { password: _, ...userWithoutPassword } = user

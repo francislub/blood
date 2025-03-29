@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,76 +30,74 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
+
+interface Donation {
+  id: string
+  donorId: string
+  donor: {
+    id: string
+    user: {
+      name: string
+      email: string
+    }
+    bloodType: string
+  }
+  status: string
+  date: string
+  units: number
+  technicianId?: string
+  technician?: {
+    user: {
+      name: string
+    }
+  }
+  eligibleNextDate?: string
+  cancellationReason?: string
+}
 
 export default function DonationsPage() {
+  const [donations, setDonations] = useState<Donation[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [bloodTypeFilter, setBloodTypeFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const { toast } = useToast()
 
-  // Mock data for donations
-  const donations = [
-    {
-      id: "D1001",
-      donorId: "1",
-      donorName: "John Doe",
-      bloodType: "A_POSITIVE",
-      status: "COMPLETED",
-      date: "2023-06-10T09:30:00Z",
-      units: 1,
-      technicianName: "Nurse Mary Mushi",
-      eligibleNextDate: "2023-08-05",
-    },
-    {
-      id: "D1002",
-      donorId: "2",
-      donorName: "Jane Smith",
-      bloodType: "O_NEGATIVE",
-      status: "COMPLETED",
-      date: "2023-06-09T11:15:00Z",
-      units: 1,
-      technicianName: "Nurse Mary Mushi",
-      eligibleNextDate: "2023-08-04",
-    },
-    {
-      id: "D1003",
-      donorId: "3",
-      donorName: "Robert Johnson",
-      bloodType: "B_POSITIVE",
-      status: "SCHEDULED",
-      date: "2023-06-15T10:00:00Z",
-      units: 1,
-    },
-    {
-      id: "D1004",
-      donorId: "5",
-      donorName: "Michael Brown",
-      bloodType: "A_NEGATIVE",
-      status: "SCHEDULED",
-      date: "2023-06-16T14:30:00Z",
-      units: 1,
-    },
-    {
-      id: "D1005",
-      donorId: "4",
-      donorName: "Emily Davis",
-      bloodType: "AB_POSITIVE",
-      status: "CANCELLED",
-      date: "2023-06-12T13:00:00Z",
-      units: 1,
-      cancellationReason: "Donor illness",
-    },
-  ]
+  useEffect(() => {
+    const fetchDonations = async () => {
+      try {
+        const response = await fetch("/api/donations")
+        if (!response.ok) {
+          throw new Error("Failed to fetch donations")
+        }
+        const data = await response.json()
+        setDonations(data)
+      } catch (error) {
+        console.error("Error fetching donations:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load donation data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDonations()
+  }, [toast])
 
   // Filter donations based on search query and filters
   const filteredDonations = donations.filter((donation) => {
     // Search query filter
     const matchesSearch =
       donation.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      donation.donorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      donation.donor.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       donation.donorId.toLowerCase().includes(searchQuery.toLowerCase())
 
     // Blood type filter
-    const matchesBloodType = bloodTypeFilter ? donation.bloodType === bloodTypeFilter : true
+    const matchesBloodType = bloodTypeFilter ? donation.donor.bloodType === bloodTypeFilter : true
 
     // Status filter
     const matchesStatus = statusFilter ? donation.status === statusFilter : true
@@ -224,90 +222,96 @@ export default function DonationsPage() {
         <TabsContent value="all" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Donation ID</TableHead>
-                    <TableHead>Donor</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDonations.length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center">
-                        No donations found.
-                      </TableCell>
+                      <TableHead>Donation ID</TableHead>
+                      <TableHead>Donor</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredDonations.map((donation) => (
-                      <TableRow key={donation.id}>
-                        <TableCell className="font-medium">{donation.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div>{donation.donorName}</div>
-                              <div className="text-xs text-muted-foreground">Donor #{donation.donorId}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(donation.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {getStatusIcon(donation.status)}
-                            <Badge variant={getStatusBadgeVariant(donation.status)}>{donation.status}</Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(donation.date)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/donations/${donation.id}`}>View Details</Link>
-                              </DropdownMenuItem>
-                              {donation.status === "SCHEDULED" && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/dashboard/donations/${donation.id}/process`}>Process Donation</Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/dashboard/donations/${donation.id}/cancel`}>Cancel Donation</Link>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/donors/${donation.donorId}`}>View Donor</Link>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDonations.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center">
+                          No donations found.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      filteredDonations.map((donation) => (
+                        <TableRow key={donation.id}>
+                          <TableCell className="font-medium">{donation.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div>{donation.donor.user.name}</div>
+                                <div className="text-xs text-muted-foreground">Donor #{donation.donorId}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(donation.donor.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              {getStatusIcon(donation.status)}
+                              <Badge variant={getStatusBadgeVariant(donation.status)}>{donation.status}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {formatDate(donation.date)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/donations/${donation.id}`}>View Details</Link>
+                                </DropdownMenuItem>
+                                {donation.status === "SCHEDULED" && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/dashboard/donations/${donation.id}/process`}>Process Donation</Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/dashboard/donations/${donation.id}/cancel`}>Cancel Donation</Link>
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/dashboard/donors/${donation.donorId}`}>View Donor</Link>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -319,59 +323,65 @@ export default function DonationsPage() {
               <CardDescription>Successfully completed blood donations</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Donation ID</TableHead>
-                    <TableHead>Donor</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Technician</TableHead>
-                    <TableHead>Next Eligible Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDonations
-                    .filter((donation) => donation.status === "COMPLETED")
-                    .map((donation) => (
-                      <TableRow key={donation.id}>
-                        <TableCell className="font-medium">{donation.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {donation.donorName}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(donation.bloodType)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {formatDate(donation.date)}
-                          </div>
-                        </TableCell>
-                        <TableCell>{donation.technicianName}</TableCell>
-                        <TableCell>
-                          {donation.eligibleNextDate && (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Donation ID</TableHead>
+                      <TableHead>Donor</TableHead>
+                      <TableHead>Blood Type</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Technician</TableHead>
+                      <TableHead>Next Eligible Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDonations
+                      .filter((donation) => donation.status === "COMPLETED")
+                      .map((donation) => (
+                        <TableRow key={donation.id}>
+                          <TableCell className="font-medium">{donation.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              {donation.donor.user.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-primary">
+                              {formatBloodType(donation.donor.bloodType)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(donation.eligibleNextDate).toLocaleDateString()}
+                              {formatDate(donation.date)}
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/donations/${donation.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell>{donation.technician?.user.name || "N/A"}</TableCell>
+                          <TableCell>
+                            {donation.eligibleNextDate && (
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                {new Date(donation.eligibleNextDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/dashboard/donations/${donation.id}`}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -383,7 +393,11 @@ export default function DonationsPage() {
               <CardDescription>Upcoming blood donation appointments</CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredDonations.filter((donation) => donation.status === "SCHEDULED").length === 0 ? (
+              {isLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                </div>
+              ) : filteredDonations.filter((donation) => donation.status === "SCHEDULED").length === 0 ? (
                 <div className="flex h-24 items-center justify-center text-muted-foreground">
                   No scheduled donations at this time.
                 </div>
@@ -398,7 +412,7 @@ export default function DonationsPage() {
                           <div className="flex items-center gap-2">
                             <Clock className="h-5 w-5 text-primary" />
                             <div className="font-medium">
-                              {donation.id} - {donation.donorName}
+                              {donation.id} - {donation.donor.user.name}
                             </div>
                             <Badge variant="warning">SCHEDULED</Badge>
                           </div>
@@ -413,7 +427,7 @@ export default function DonationsPage() {
                             <span className="font-medium">Donor ID:</span> #{donation.donorId}
                           </div>
                           <div>
-                            <span className="font-medium">Blood Type:</span> {formatBloodType(donation.bloodType)}
+                            <span className="font-medium">Blood Type:</span> {formatBloodType(donation.donor.bloodType)}
                           </div>
                           <div className="col-span-2">
                             <span className="font-medium">Scheduled For:</span> {formatDate(donation.date)}
