@@ -7,18 +7,23 @@ import { authOptions } from "../auth/[...nextauth]/route"
 // Create a new user
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    let session
 
-    // Only admins can create users (except for donor self-registration)
-    if (!session && req.body.role !== "DONOR") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Try to get the session, but handle errors gracefully
+    try {
+      session = await getServerSession(authOptions)
+    } catch (error) {
+      console.error("Error getting session:", error instanceof Error ? error.message : "Unknown error")
+      session = null
     }
 
-    if (session?.user.role !== "ADMIN" && req.body.role !== "DONOR") {
+    const body = await req.json()
+    const { name, email, password, role, phoneNumber, address, ...roleSpecificData } = body
+
+    // If role is not DONOR and no session, or session user is not ADMIN, deny access
+    if (role !== "DONOR" && (!session || session.user.role !== "ADMIN")) {
       return NextResponse.json({ error: "Only admins can create non-donor users" }, { status: 403 })
     }
-
-    const { name, email, password, role, phoneNumber, address, ...roleSpecificData } = await req.json()
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
             gender: roleSpecificData.donor.gender,
             weight: roleSpecificData.donor.weight,
             height: roleSpecificData.donor.height,
-            medicalHistory: roleSpecificData.donor.medicalHistory,
+            medicalHistory: roleSpecificData.donor.medicalHistory || "",
           },
         })
       } else if (role === "MEDICAL_OFFICER" && roleSpecificData.medicalOfficer) {
@@ -85,7 +90,7 @@ export async function POST(req: NextRequest) {
     const { password: _, ...userWithoutPassword } = user
     return NextResponse.json(userWithoutPassword, { status: 201 })
   } catch (error) {
-    console.error("Error creating user:", error)
+    console.error("Error creating user:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
   }
 }
@@ -93,7 +98,15 @@ export async function POST(req: NextRequest) {
 // Get all users (admin only)
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    let session
+
+    // Try to get the session, but handle errors gracefully
+    try {
+      session = await getServerSession(authOptions)
+    } catch (error) {
+      console.error("Error getting session:", error instanceof Error ? error.message : "Unknown error")
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+    }
 
     if (!session || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -114,7 +127,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(users)
   } catch (error) {
-    console.error("Error fetching users:", error)
+    console.error("Error fetching users:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 })
   }
 }

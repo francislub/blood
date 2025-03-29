@@ -3,8 +3,9 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { getServerSession } from "next-auth/next"
 import { SessionProvider } from "@/components/session-provider"
+import { Navbar } from "@/components/layout/navbar"
+import { Footer } from "@/components/layout/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -13,19 +14,19 @@ export const metadata: Metadata = {
   description: "A comprehensive blood bank management system for Nyamagana",
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const session = await getServerSession()
-
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SessionProvider session={session}>
+        <SessionProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-            {children}
+            <Navbar />
+            <main className="min-h-screen">{children}</main>
+            <Footer />
           </ThemeProvider>
         </SessionProvider>
       </body>
