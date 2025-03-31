@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(patient, { status: 201 })
   } catch (error) {
-    console.error("Error creating patient:", error)
+    // Fix the error handling to avoid null payload
+    console.error("Error creating patient:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to create patient" }, { status: 500 })
   }
 }
@@ -123,7 +124,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(patients)
   } catch (error) {
-    console.error("Error fetching patients:", error)
+    // Fix the error handling to avoid null payload
+    console.error("Error fetching patients:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch patients" }, { status: 500 })
   }
 }

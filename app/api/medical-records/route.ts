@@ -1,32 +1,130 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
 import prisma from "@/lib/prisma"
-import { authOptions } from "@/lib/auth"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../auth/[...nextauth]/route"
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    // Only medical officers and admins can create medical records
+    if (!session || (session.user.role !== "MEDICAL_OFFICER" && session.user.role !== "ADMIN")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { patientId, recordType, title, details } = await req.json()
+
+    // Validate input
+    if (!patientId || !recordType || !title) {
+      return NextResponse.json({ error: "Patient ID, record type, and title are required" }, { status: 400 })
+    }
+
+    // Check if patient exists
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    })
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 })
+    }
+
+    // Get medical officer ID
+    let medicalOfficerId = null
+    if (session.user.role === "MEDICAL_OFFICER") {
+      const medicalOfficer = await prisma.medicalOfficer.findUnique({
+        where: { userId: session.user.id },
+      })
+
+      if (!medicalOfficer) {
+        return NextResponse.json({ error: "Medical officer profile not found" }, { status: 404 })
+      }
+
+      medicalOfficerId = medicalOfficer.id
+    } else if (session.user.role === "ADMIN") {
+      // If admin, find a medical officer associated with the patient
+      if (patient.medicalOfficerId) {
+        medicalOfficerId = patient.medicalOfficerId
+      } else {
+        // Find any medical officer
+        const anyMedicalOfficer = await prisma.medicalOfficer.findFirst()
+        if (anyMedicalOfficer) {
+          medicalOfficerId = anyMedicalOfficer.id
+        } else {
+          return NextResponse.json({ error: "No medical officers found in the system" }, { status: 400 })
+        }
+      }
+    }
+
+    // Create the medical record
+    const medicalRecord = await prisma.medicalRecord.create({
+      data: {
+        patientId,
+        medicalOfficerId,
+        recordType,
+        title,
+        details,
+      },
+      include: {
+        patient: true,
+        medicalOfficer: {
+          include: {
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    return NextResponse.json(medicalRecord, { status: 201 })
+  } catch (error) {
+    console.error("Error creating medical record:", error instanceof Error ? error.message : "Unknown error")
+    return NextResponse.json({ error: "Failed to create medical record" }, { status: 500 })
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
 
-    if (!session) {
+    // Only medical officers and admins can access medical records
+    if (!session || (session.user.role !== "MEDICAL_OFFICER" && session.user.role !== "ADMIN")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if user has permission to view medical records
-    if (!["ADMIN", "MEDICAL_OFFICER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const url = new URL(req.url)
+    const patientId = url.searchParams.get("patientId")
+    const recordType = url.searchParams.get("recordType")
+
+    const where: any = {}
+
+    if (patientId) {
+      where.patientId = patientId
     }
 
-    // Get all medical records with patient information
-    const records = await prisma.medicalRecord.findMany({
+    if (recordType) {
+      where.recordType = recordType
+    }
+
+    // If medical officer, only show records for their patients
+    if (session.user.role === "MEDICAL_OFFICER") {
+      const medicalOfficer = await prisma.medicalOfficer.findUnique({
+        where: { userId: session.user.id },
+      })
+
+      if (medicalOfficer) {
+        where.medicalOfficerId = medicalOfficer.id
+      }
+    }
+
+    const medicalRecords = await prisma.medicalRecord.findMany({
+      where,
       include: {
-        patient: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        doctor: {
-          select: {
+        patient: true,
+        medicalOfficer: {
+          include: {
             user: {
               select: {
                 name: true,
@@ -40,75 +138,10 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    // Transform data for the frontend
-    const formattedRecords = records.map((record) => ({
-      id: record.id,
-      patientId: record.patientId,
-      patient: {
-        id: record.patient.id,
-        name: record.patient.name,
-      },
-      recordType: record.recordType,
-      date: record.createdAt.toISOString(),
-      title: record.title,
-      summary: record.summary,
-      details: record.details,
-      doctorName: record.doctor.user.name,
-      relatedItems: record.relatedItems ? JSON.parse(record.relatedItems as string) : undefined,
-    }))
-
-    return NextResponse.json(formattedRecords)
+    return NextResponse.json(medicalRecords)
   } catch (error) {
-    console.error("Error fetching medical records:", error)
+    console.error("Error fetching medical records:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch medical records" }, { status: 500 })
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions)
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Check if user has permission to create medical records
-    if (!["ADMIN", "MEDICAL_OFFICER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
-    // Get medical officer ID
-    const medicalOfficer = await prisma.medicalOfficer.findUnique({
-      where: { userId: session.user.id },
-    })
-
-    if (!medicalOfficer) {
-      return NextResponse.json({ error: "Medical officer profile not found" }, { status: 404 })
-    }
-
-    const data = await req.json()
-
-    // Create the medical record
-    const record = await prisma.medicalRecord.create({
-      data: {
-        patientId: data.patientId,
-        doctorId: medicalOfficer.id,
-        recordType: data.recordType,
-        title: data.title,
-        summary: data.summary,
-        details: data.details,
-        relatedItems: data.relatedItems?.length ? JSON.stringify(data.relatedItems) : null,
-      },
-    })
-
-    return NextResponse.json({
-      id: record.id,
-      status: "success",
-      message: "Medical record created successfully",
-    })
-  } catch (error) {
-    console.error("Error creating medical record:", error)
-    return NextResponse.json({ error: "Failed to create medical record" }, { status: 500 })
   }
 }
 

@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -51,6 +53,15 @@ interface BloodUnit {
 }
 
 export default function InventoryPage() {
+  // Client-side date formatter
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toISOString().split("T")[0]
+    } catch (e) {
+      return "Invalid date"
+    }
+  }
+
   const [bloodUnits, setBloodUnits] = useState<BloodUnit[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -67,6 +78,22 @@ export default function InventoryPage() {
     status: "AVAILABLE",
   })
   const { toast } = useToast()
+
+  // Move expiry calculations to client-side only
+  const [expiringUnits, setExpiringUnits] = useState<BloodUnit[]>([])
+
+  useEffect(() => {
+    // Calculate expiring units on the client side only
+    const expiring = bloodUnits.filter((unit) => {
+      if (unit.status !== "AVAILABLE") return false
+      const expiryDate = new Date(unit.expiryDate)
+      const today = new Date()
+      const diffTime = expiryDate.getTime() - today.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      return diffDays <= 7 && diffDays > 0
+    })
+    setExpiringUnits(expiring)
+  }, [bloodUnits])
 
   // Fetch blood units from the database
   const fetchBloodUnits = async () => {
@@ -95,7 +122,7 @@ export default function InventoryPage() {
   }, [])
 
   // Add new blood unit
-  const handleAddUnit = async (e) => {
+  const handleAddUnit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const response = await fetch("/api/blood-units", {
@@ -173,13 +200,9 @@ export default function InventoryPage() {
   }
 
   // Helper function to check if blood unit is expiring soon (within 7 days)
-  const isExpiringSoon = (unit) => {
+  const isExpiringSoon = (unit: BloodUnit) => {
     if (unit.status !== "AVAILABLE") return false
-    const expiryDate = new Date(unit.expiryDate)
-    const today = new Date()
-    const diffTime = expiryDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays <= 7 && diffDays > 0
+    return expiringUnits.some((u) => u.id === unit.id)
   }
 
   // Filter blood units based on search query and filters
@@ -190,10 +213,10 @@ export default function InventoryPage() {
       (unit.donor?.user?.name && unit.donor.user.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
     // Blood type filter
-    const matchesBloodType = bloodTypeFilter ? unit.bloodType === bloodTypeFilter : true
+    const matchesBloodType = bloodTypeFilter && bloodTypeFilter !== "ALL" ? unit.bloodType === bloodTypeFilter : true
 
     // Status filter
-    const matchesStatus = statusFilter ? unit.status === statusFilter : true
+    const matchesStatus = statusFilter && statusFilter !== "ALL" ? unit.status === statusFilter : true
 
     return matchesSearch && matchesBloodType && matchesStatus
   })
@@ -238,6 +261,16 @@ export default function InventoryPage() {
     const date = new Date(collectionDate)
     date.setDate(date.getDate() + 35) // Blood typically expires after 35 days
     return date.toISOString().split("T")[0]
+  }
+
+  const getDaysLeft = (expiryDate: string) => {
+    const expiry = new Date(expiryDate)
+    const today = new Date()
+    // Reset hours to avoid time zone issues
+    expiry.setHours(0, 0, 0, 0)
+    today.setHours(0, 0, 0, 0)
+    const diffTime = expiry.getTime() - today.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
 
   return (
@@ -410,7 +443,7 @@ export default function InventoryPage() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="ALL">All Types</SelectItem>
                 <SelectItem value="A_POSITIVE">A+</SelectItem>
                 <SelectItem value="A_NEGATIVE">A-</SelectItem>
                 <SelectItem value="B_POSITIVE">B+</SelectItem>
@@ -484,13 +517,13 @@ export default function InventoryPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(unit.collectionDate).toLocaleDateString()}
+                              {formatDate(unit.collectionDate)}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(unit.expiryDate).toLocaleDateString()}
+                              {formatDate(unit.expiryDate)}
                               {isExpiringSoon(unit) && <AlertTriangle className="h-4 w-4 text-amber-500" />}
                             </div>
                           </TableCell>
@@ -560,13 +593,13 @@ export default function InventoryPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(unit.collectionDate).toLocaleDateString()}
+                              {formatDate(unit.collectionDate)}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              {new Date(unit.expiryDate).toLocaleDateString()}
+                              {formatDate(unit.expiryDate)}
                               {isExpiringSoon(unit) && <AlertTriangle className="h-4 w-4 text-amber-500" />}
                             </div>
                           </TableCell>
@@ -609,14 +642,20 @@ export default function InventoryPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredBloodUnits
-                      .filter((unit) => isExpiringSoon(unit))
+                    {expiringUnits
+                      .filter((unit) => {
+                        // Apply the same search and filter logic as filteredBloodUnits
+                        const matchesSearch =
+                          unit.unitNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (unit.donor?.user?.name &&
+                            unit.donor.user.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                        const matchesBloodType =
+                          bloodTypeFilter && bloodTypeFilter !== "ALL" ? unit.bloodType === bloodTypeFilter : true
+                        return matchesSearch && matchesBloodType
+                      })
                       .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime())
                       .map((unit) => {
-                        const expiryDate = new Date(unit.expiryDate)
-                        const today = new Date()
-                        const diffTime = expiryDate.getTime() - today.getTime()
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                        const diffDays = getDaysLeft(unit.expiryDate)
 
                         return (
                           <TableRow key={unit.id}>
@@ -634,13 +673,13 @@ export default function InventoryPage() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                {new Date(unit.collectionDate).toLocaleDateString()}
+                                {formatDate(unit.collectionDate)}
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                {new Date(unit.expiryDate).toLocaleDateString()}
+                                {formatDate(unit.expiryDate)}
                               </div>
                             </TableCell>
                             <TableCell>

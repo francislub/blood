@@ -1,5 +1,4 @@
 "use client"
-
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -37,7 +36,7 @@ export default function EditUserPage({ params }: { params: { id: string } }) {
     if (status === "authenticated" && session?.user?.role === "ADMIN") {
       fetchUser()
     }
-  }, [params.id, session, status, router])
+  }, [params, session, status, router])
 
   if (status === "loading" || isLoading) {
     return (
