@@ -1,564 +1,437 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/use-toast"
+import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { Search, Plus, Download, Filter, ShieldCheck, AlertTriangle, MoreHorizontal } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { format } from "date-fns"
+import { AlertCircle, Search, Droplet, ShieldCheck, CheckCircle2, XCircle } from "lucide-react"
 
 export default function QualityControlPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [bloodUnits, setBloodUnits] = useState([])
+  const [inspectedUnits, setInspectedUnits] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
-  const [isAddQCOpen, setIsAddQCOpen] = useState(false)
-
-  // Mock data for quality control checks
-  const qcChecks = [
-    {
-      id: "QC-001-23",
-      unitId: "BU-001-23",
-      bloodType: "A_POSITIVE",
-      componentType: "RED_CELLS",
-      status: "PASSED",
-      date: "2023-06-10T15:30:00Z",
-      parameters: {
-        volume: "280 ml",
-        hematocrit: "75%",
-        hemoglobin: "55 g/unit",
-        hemolysis: "0.2%",
-        sterility: "Passed",
-      },
-      technicianName: "Michael Brown",
-      notes: "All parameters within acceptable range",
-    },
-    {
-      id: "QC-002-23",
-      unitId: "BU-002-23",
-      bloodType: "O_NEGATIVE",
-      componentType: "PLASMA",
-      status: "PASSED",
-      date: "2023-06-09T16:45:00Z",
-      parameters: {
-        volume: "210 ml",
-        appearance: "Clear, no hemolysis",
-        factor8: "0.85 IU/ml",
-        sterility: "Passed",
-      },
-      technicianName: "Michael Brown",
-      notes: "All parameters within acceptable range",
-    },
-    {
-      id: "QC-003-23",
-      unitId: "BU-003-23",
-      bloodType: "B_POSITIVE",
-      componentType: "PLATELETS",
-      status: "PENDING",
-      scheduledDate: "2023-06-15T15:00:00Z",
-    },
-    {
-      id: "QC-004-23",
-      unitId: "BU-004-23",
-      bloodType: "A_NEGATIVE",
-      componentType: "RED_CELLS",
-      status: "PENDING",
-      scheduledDate: "2023-06-16T18:30:00Z",
-    },
-    {
-      id: "QC-005-23",
-      unitId: "BU-005-23",
-      bloodType: "A_POSITIVE",
-      componentType: "RED_CELLS",
-      status: "FAILED",
-      date: "2023-06-08T14:30:00Z",
-      parameters: {
-        volume: "260 ml",
-        hematocrit: "65%",
-        hemoglobin: "45 g/unit",
-        hemolysis: "0.8%",
-        sterility: "Passed",
-      },
-      technicianName: "Michael Brown",
-      notes: "Hemolysis exceeds acceptable limit of 0.6%, unit discarded",
-    },
-  ]
-
-  // Filter QC checks based on search query and filters
-  const filteredChecks = qcChecks.filter((check) => {
-    // Search query filter
-    const matchesSearch =
-      check.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      check.unitId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      check.componentType.toLowerCase().includes(searchQuery.toLowerCase())
-
-    // Status filter
-    const matchesStatus = statusFilter ? check.status === statusFilter : true
-
-    return matchesSearch && matchesStatus
+  const [selectedUnit, setSelectedUnit] = useState(null)
+  const [inspectionResults, setInspectionResults] = useState({
+    appearance: "",
+    temperature: "",
+    packaging: "",
+    labeling: "",
+    expiryDate: "",
+    notes: "",
+    passed: true,
   })
 
-  // Format blood type for display
-  const formatBloodType = (type: string) => {
+  useEffect(() => {
+    if (status === "loading") return
+
+    if (!session) {
+      router.push("/auth/signin")
+      return
+    }
+
+    // Only technicians and admins can access this page
+    if (session.user.role !== "BLOOD_BANK_TECHNICIAN" && session.user.role !== "ADMIN") {
+      router.push("/dashboard")
+      return
+    }
+
+    fetchBloodUnits()
+  }, [session, status, router])
+
+  const fetchBloodUnits = async () => {
+    setIsLoading(true)
+    try {
+      // Fetch blood units that need quality control
+      const response = await fetch("/api/blood-units?status=AVAILABLE&qualityControl=false")
+      if (!response.ok) throw new Error("Failed to fetch blood units")
+      const data = await response.json()
+      setBloodUnits(data)
+
+      // Fetch blood units that have already been inspected
+      const inspectedResponse = await fetch("/api/blood-units?qualityControl=true")
+      if (!inspectedResponse.ok) throw new Error("Failed to fetch inspected units")
+      const inspectedData = await inspectedResponse.json()
+      setInspectedUnits(inspectedData)
+    } catch (error) {
+      console.error("Error fetching blood units:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load blood units",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSelectUnit = (unit) => {
+    setSelectedUnit(unit)
+    // Reset inspection results
+    setInspectionResults({
+      appearance: "",
+      temperature: "",
+      packaging: "",
+      labeling: "",
+      expiryDate: "",
+      notes: "",
+      passed: true,
+    })
+  }
+
+  const handleSubmit = async () => {
+    if (!selectedUnit) return
+
+    // Validate required fields
+    if (
+      !inspectionResults.appearance ||
+      !inspectionResults.temperature ||
+      !inspectionResults.packaging ||
+      !inspectionResults.labeling
+    ) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/blood-units/${selectedUnit.id}/quality-control`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inspectionResults,
+          status: inspectionResults.passed ? "AVAILABLE" : "DISCARDED",
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to submit inspection results")
+      }
+
+      toast({
+        title: "Success",
+        description: "Quality control inspection completed successfully",
+      })
+
+      // Refresh blood units
+      fetchBloodUnits()
+      setSelectedUnit(null)
+    } catch (error) {
+      console.error("Error submitting inspection results:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit inspection results",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const formatBloodType = (type) => {
+    if (!type) return ""
     return type.replace("_", " ").replace("POSITIVE", "+").replace("NEGATIVE", "-")
   }
 
-  // Format component type for display
-  const formatComponentType = (type: string) => {
-    return type.replace(/_/g, " ")
+  const formatComponentType = (type) => {
+    if (!type) return "Whole Blood"
+    return type.replace("_", " ")
   }
 
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
+  const filteredBloodUnits = bloodUnits.filter(
+    (unit) =>
+      unit.unitNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      formatBloodType(unit.bloodType).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      formatComponentType(unit.componentType).toLowerCase().includes(searchQuery.toLowerCase()),
+  )
 
-  // Get badge variant based on status
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "PASSED":
-        return "success"
-      case "PENDING":
-        return "warning"
-      case "FAILED":
-        return "destructive"
-      default:
-        return "secondary"
-    }
+  const filteredInspectedUnits = inspectedUnits.filter(
+    (unit) =>
+      unit.unitNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      formatBloodType(unit.bloodType).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      formatComponentType(unit.componentType).toLowerCase().includes(searchQuery.toLowerCase()),
+  )
+
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Quality Control</h1>
-          <p className="text-muted-foreground">Manage quality control checks for blood components</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Dialog open={isAddQCOpen} onOpenChange={setIsAddQCOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Record QC Check
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[525px]">
-              <DialogHeader>
-                <DialogTitle>Record Quality Control Check</DialogTitle>
-                <DialogDescription>Enter quality control parameters for a blood component</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="unit-id">Blood Unit ID</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select blood unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BU-003-23">BU-003-23 (B+, RED CELLS)</SelectItem>
-                      <SelectItem value="BU-004-23">BU-004-23 (A-, RED CELLS)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="component-type">Component Type</Label>
-                  <Select defaultValue="RED_CELLS">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="RED_CELLS">Red Blood Cells</SelectItem>
-                      <SelectItem value="PLASMA">Plasma</SelectItem>
-                      <SelectItem value="PLATELETS">Platelets</SelectItem>
-                      <SelectItem value="CRYOPRECIPITATE">Cryoprecipitate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-4 rounded-md border p-4">
-                  <h4 className="font-medium">Quality Parameters</h4>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="volume">Volume (ml)</Label>
-                      <Input id="volume" type="number" defaultValue="280" />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="hematocrit">Hematocrit (%)</Label>
-                      <Input id="hematocrit" type="number" step="0.1" defaultValue="75" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="hemoglobin">Hemoglobin (g/unit)</Label>
-                      <Input id="hemoglobin" type="number" step="0.1" defaultValue="55" />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="hemolysis">Hemolysis (%)</Label>
-                      <Input id="hemolysis" type="number" step="0.01" defaultValue="0.2" />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="sterility">Sterility</Label>
-                    <Select defaultValue="PASSED">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PASSED">Passed</SelectItem>
-                        <SelectItem value="FAILED">Failed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea id="notes" placeholder="Additional notes about the quality control check..." />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="status">Final Status</Label>
-                  <Select defaultValue="PASSED">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PASSED">Passed</SelectItem>
-                      <SelectItem value="FAILED">Failed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddQCOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => setIsAddQCOpen(false)}>Save Results</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Quality Control</h1>
+        <p className="text-muted-foreground">Inspect blood units to ensure quality and safety</p>
       </div>
 
-      <Tabs defaultValue="all">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <TabsList>
-            <TabsTrigger value="all">All Checks</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="passed">Passed</TabsTrigger>
-            <TabsTrigger value="failed">Failed</TabsTrigger>
+      <div className="flex items-center space-x-2">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by unit number, blood type, or component..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-sm"
+        />
+        <Button variant="outline" onClick={fetchBloodUnits}>
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Tabs defaultValue="pending" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="pending">Pending Inspection ({filteredBloodUnits.length})</TabsTrigger>
+            <TabsTrigger value="inspected">Inspected Units ({filteredInspectedUnits.length})</TabsTrigger>
           </TabsList>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search QC checks..."
-                className="w-full pl-8 sm:w-[300px]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[150px]">
-                <div className="flex items-center">
-                  <Filter className="mr-2 h-4 w-4" />
-                  {statusFilter ? statusFilter : "Status"}
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="PASSED">Passed</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="FAILED">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <TabsContent value="all" className="mt-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>QC ID</TableHead>
-                    <TableHead>Unit ID</TableHead>
-                    <TableHead>Blood Type</TableHead>
-                    <TableHead>Component</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredChecks.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        No quality control checks found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredChecks.map((check) => (
-                      <TableRow key={check.id}>
-                        <TableCell className="font-medium">{check.id}</TableCell>
-                        <TableCell>{check.unitId}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-medium text-primary">
-                            {formatBloodType(check.bloodType)}
+          <TabsContent value="pending" className="space-y-4">
+            {filteredBloodUnits.length === 0 ? (
+              <div className="flex h-32 items-center justify-center rounded-md border border-dashed">
+                <p className="text-muted-foreground">No blood units pending inspection</p>
+              </div>
+            ) : (
+              filteredBloodUnits.map((unit) => (
+                <Card
+                  key={unit.id}
+                  className={`cursor-pointer ${selectedUnit?.id === unit.id ? "border-primary" : ""}`}
+                  onClick={() => handleSelectUnit(unit)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium">Unit #{unit.unitNumber}</h3>
+                        <p className="text-sm text-muted-foreground">{formatComponentType(unit.componentType)}</p>
+                      </div>
+                      <Badge variant="outline" className="font-medium text-primary">
+                        {formatBloodType(unit.bloodType)}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Created:</span>{" "}
+                        {format(new Date(unit.createdAt), "MMM d, yyyy")}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Expires:</span>{" "}
+                        {format(new Date(unit.expiryDate), "MMM d, yyyy")}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Volume:</span> {unit.volume} mL
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+          <TabsContent value="inspected" className="space-y-4">
+            {filteredInspectedUnits.length === 0 ? (
+              <div className="flex h-32 items-center justify-center rounded-md border border-dashed">
+                <p className="text-muted-foreground">No inspected blood units</p>
+              </div>
+            ) : (
+              filteredInspectedUnits.map((unit) => (
+                <Card key={unit.id}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium">Unit #{unit.unitNumber}</h3>
+                        <p className="text-sm text-muted-foreground">{formatComponentType(unit.componentType)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-medium text-primary">
+                          {formatBloodType(unit.bloodType)}
+                        </Badge>
+                        {unit.status === "AVAILABLE" ? (
+                          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                            <CheckCircle2 className="mr-1 h-3 w-3" /> Passed
                           </Badge>
-                        </TableCell>
-                        <TableCell>{formatComponentType(check.componentType)}</TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusBadgeVariant(check.status)}>{check.status}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {check.date ? (
-                            formatDate(check.date)
-                          ) : check.scheduledDate ? (
-                            <span className="text-muted-foreground">Scheduled: {formatDate(check.scheduledDate)}</span>
-                          ) : (
-                            <span className="text-muted-foreground">Not scheduled</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/quality-control/${check.id}`}>View Details</Link>
-                              </DropdownMenuItem>
-                              {check.status === "PENDING" && (
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/dashboard/quality-control/${check.id}/record`}>Record Results</Link>
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/inventory/${check.unitId}`}>View Blood Unit</Link>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="pending" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Checks</CardTitle>
-              <CardDescription>Blood components awaiting quality control</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {filteredChecks.filter((check) => check.status === "PENDING").length === 0 ? (
-                <div className="flex h-24 items-center justify-center text-muted-foreground">
-                  No pending quality control checks at this time.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredChecks
-                    .filter((check) => check.status === "PENDING")
-                    .map((check) => (
-                      <div key={check.id} className="rounded-md border p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5 text-primary" />
-                            <div className="font-medium">
-                              {check.id} - {check.unitId}
-                            </div>
-                            <Badge variant="warning">PENDING</Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" asChild>
-                              <Link href={`/dashboard/quality-control/${check.id}/record`}>Record Results</Link>
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="font-medium">Blood Type:</span> {formatBloodType(check.bloodType)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Component:</span> {formatComponentType(check.componentType)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Scheduled Date:</span> {formatDate(check.scheduledDate)}
-                          </div>
-                        </div>
+                        ) : (
+                          <Badge variant="destructive">
+                            <XCircle className="mr-1 h-3 w-3" /> Failed
+                          </Badge>
+                        )}
                       </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="passed" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Passed Checks</CardTitle>
-              <CardDescription>Blood components that passed quality control</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>QC ID</TableHead>
-                    <TableHead>Unit ID</TableHead>
-                    <TableHead>Component</TableHead>
-                    <TableHead>Parameters</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Technician</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredChecks
-                    .filter((check) => check.status === "PASSED")
-                    .map((check) => (
-                      <TableRow key={check.id}>
-                        <TableCell className="font-medium">{check.id}</TableCell>
-                        <TableCell>{check.unitId}</TableCell>
-                        <TableCell>{formatComponentType(check.componentType)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1 text-xs">
-                            {check.parameters &&
-                              Object.entries(check.parameters).map(([key, value]) => (
-                                <div key={key}>
-                                  <span className="font-medium">{key.charAt(0).toUpperCase() + key.slice(1)}:</span>{" "}
-                                  {value}
-                                </div>
-                              ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>{formatDate(check.date)}</TableCell>
-                        <TableCell>{check.technicianName}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/quality-control/${check.id}`}>View</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="failed" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Failed Checks</CardTitle>
-              <CardDescription>Blood components that failed quality control</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {filteredChecks.filter((check) => check.status === "FAILED").length === 0 ? (
-                <div className="flex h-24 items-center justify-center text-muted-foreground">
-                  No failed quality control checks found.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredChecks
-                    .filter((check) => check.status === "FAILED")
-                    .map((check) => (
-                      <div
-                        key={check.id}
-                        className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                            <div className="font-medium">
-                              {check.id} - {check.unitId}
-                            </div>
-                            <Badge variant="destructive">FAILED</Badge>
-                          </div>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="font-medium">Blood Type:</span> {formatBloodType(check.bloodType)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Component:</span> {formatComponentType(check.componentType)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Test Date:</span> {formatDate(check.date)}
-                          </div>
-                          <div>
-                            <span className="font-medium">Technician:</span> {check.technicianName}
-                          </div>
-                        </div>
-                        <div className="mt-2 space-y-2 text-sm">
-                          <div className="font-medium">Parameters:</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {check.parameters &&
-                              Object.entries(check.parameters).map(([key, value]) => (
-                                <div key={key}>
-                                  <span className="font-medium">{key.charAt(0).toUpperCase() + key.slice(1)}:</span>{" "}
-                                  {value}
-                                </div>
-                              ))}
-                          </div>
-                          <div>
-                            <span className="font-medium">Notes:</span> {check.notes}
-                          </div>
-                        </div>
-                        <div className="mt-4 flex justify-end">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/quality-control/${check.id}`}>View Full Details</Link>
-                          </Button>
-                        </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Inspected:</span>{" "}
+                        {format(new Date(unit.updatedAt), "MMM d, yyyy")}
                       </div>
-                    ))}
+                      <div>
+                        <span className="text-muted-foreground">Expires:</span>{" "}
+                        {format(new Date(unit.expiryDate), "MMM d, yyyy")}
+                      </div>
+                    </div>
+                    {unit.qualityControlNotes && (
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <span className="font-medium">Notes:</span> {unit.qualityControlNotes}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {selectedUnit ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Quality Control Inspection</CardTitle>
+              <CardDescription>Inspect blood unit #{selectedUnit.unitNumber}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md bg-muted p-4">
+                <div className="flex items-center gap-4">
+                  <Droplet className="h-8 w-8 text-primary" />
+                  <div>
+                    <h3 className="font-medium">{formatComponentType(selectedUnit.componentType)}</h3>
+                    <p className="text-sm">
+                      {formatBloodType(selectedUnit.bloodType)} • {selectedUnit.volume} mL
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Expires: {format(new Date(selectedUnit.expiryDate), "MMMM d, yyyy")}
+                    </p>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-medium">Inspection Checklist</h3>
+
+                <div className="space-y-2">
+                  <Label htmlFor="appearance">Visual Appearance</Label>
+                  <Select
+                    value={inspectionResults.appearance}
+                    onValueChange={(value) => setInspectionResults({ ...inspectionResults, appearance: value })}
+                  >
+                    <SelectTrigger id="appearance">
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NORMAL">Normal</SelectItem>
+                      <SelectItem value="HEMOLYZED">Hemolyzed</SelectItem>
+                      <SelectItem value="CLOUDY">Cloudy</SelectItem>
+                      <SelectItem value="CLOTTED">Clotted</SelectItem>
+                      <SelectItem value="OTHER">Other (specify in notes)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="temperature">Storage Temperature</Label>
+                  <Select
+                    value={inspectionResults.temperature}
+                    onValueChange={(value) => setInspectionResults({ ...inspectionResults, temperature: value })}
+                  >
+                    <SelectTrigger id="temperature">
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="OPTIMAL">Optimal (1-6°C)</SelectItem>
+                      <SelectItem value="ACCEPTABLE">Acceptable (within range)</SelectItem>
+                      <SelectItem value="OUT_OF_RANGE">Out of range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="packaging">Packaging Integrity</Label>
+                  <Select
+                    value={inspectionResults.packaging}
+                    onValueChange={(value) => setInspectionResults({ ...inspectionResults, packaging: value })}
+                  >
+                    <SelectTrigger id="packaging">
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="INTACT">Intact</SelectItem>
+                      <SelectItem value="MINOR_DEFECT">Minor defect</SelectItem>
+                      <SelectItem value="COMPROMISED">Compromised</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="labeling">Labeling Accuracy</Label>
+                  <Select
+                    value={inspectionResults.labeling}
+                    onValueChange={(value) => setInspectionResults({ ...inspectionResults, labeling: value })}
+                  >
+                    <SelectTrigger id="labeling">
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CORRECT">Correct</SelectItem>
+                      <SelectItem value="MINOR_ERROR">Minor error</SelectItem>
+                      <SelectItem value="MAJOR_ERROR">Major error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    placeholder="Additional observations or issues..."
+                    value={inspectionResults.notes}
+                    onChange={(e) => setInspectionResults({ ...inspectionResults, notes: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-2">
+                  <input
+                    type="checkbox"
+                    id="passed"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={inspectionResults.passed}
+                    onChange={(e) => setInspectionResults({ ...inspectionResults, passed: e.target.checked })}
+                  />
+                  <Label htmlFor="passed" className="text-sm font-normal">
+                    Unit passes quality control
+                  </Label>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => setSelectedUnit(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit}>
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Complete Inspection
+              </Button>
+            </CardFooter>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="flex h-64 items-center justify-center">
+              <div className="text-center">
+                <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
+                <p className="mt-2 text-muted-foreground">Select a blood unit to inspect</p>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </div>
   )
 }

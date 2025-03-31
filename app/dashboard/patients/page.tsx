@@ -55,12 +55,7 @@ interface Patient {
 }
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState<Patient[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [bloodTypeFilter, setBloodTypeFilter] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
-  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
+  // Update the newPatient state to include hospitalId
   const [newPatient, setNewPatient] = useState({
     firstName: "",
     lastName: "",
@@ -69,7 +64,16 @@ export default function PatientsPage() {
     bloodType: "",
     diagnosis: "",
     doctor: "",
+    hospitalId: "",
+    contactNumber: "",
+    address: "",
   })
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [bloodTypeFilter, setBloodTypeFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -96,16 +100,30 @@ export default function PatientsPage() {
     fetchPatients()
   }, [toast])
 
-  // Handle adding a new patient
+  // Update the form submission to include all required fields
   const handleAddPatient = async (e) => {
     e.preventDefault()
     try {
+      // Create a properly formatted patient object
+      const patientData = {
+        name: `${newPatient.firstName} ${newPatient.lastName}`,
+        hospitalId: newPatient.hospitalId || `PT-${Date.now().toString().slice(-6)}`, // Generate a hospital ID if not provided
+        dateOfBirth: new Date(
+          new Date().setFullYear(new Date().getFullYear() - Number.parseInt(newPatient.age)),
+        ).toISOString(),
+        gender: newPatient.gender,
+        bloodType: newPatient.bloodType,
+        contactNumber: newPatient.contactNumber,
+        address: newPatient.address,
+        diagnosis: newPatient.diagnosis,
+      }
+
       const response = await fetch("/api/patients", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(newPatient),
+        body: JSON.stringify(patientData),
       })
 
       if (!response.ok) {
@@ -127,6 +145,9 @@ export default function PatientsPage() {
         bloodType: "",
         diagnosis: "",
         doctor: "",
+        hospitalId: "",
+        contactNumber: "",
+        address: "",
       })
 
       // Refresh the patient list
@@ -214,6 +235,17 @@ export default function PatientsPage() {
                       />
                     </div>
                   </div>
+                  {/* Add hospitalId field to the form */}
+                  {/* Add this after the first name and last name fields in the form */}
+                  <div className="grid gap-2">
+                    <Label htmlFor="hospital-id">Hospital ID</Label>
+                    <Input
+                      id="hospital-id"
+                      placeholder="Hospital ID"
+                      value={newPatient.hospitalId}
+                      onChange={(e) => setNewPatient({ ...newPatient, hospitalId: e.target.value })}
+                    />
+                  </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="gender">Gender</Label>
@@ -264,6 +296,26 @@ export default function PatientsPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  {/* Add contact information fields to the form */}
+                  {/* Add these after the blood type field */}
+                  <div className="grid gap-2">
+                    <Label htmlFor="contact-number">Contact Number</Label>
+                    <Input
+                      id="contact-number"
+                      placeholder="Contact number"
+                      value={newPatient.contactNumber}
+                      onChange={(e) => setNewPatient({ ...newPatient, contactNumber: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      placeholder="Address"
+                      value={newPatient.address}
+                      onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
+                    />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="diagnosis">Diagnosis</Label>

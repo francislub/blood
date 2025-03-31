@@ -1,176 +1,108 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { format } from "date-fns"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Calendar } from "@/components/ui/date-picker"
-import { format } from "date-fns"
+import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, User, Droplet, Clock } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { AlertCircle, CalendarIcon, Clock } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { DatePicker } from "@/components/ui/date-picker"
 
-export default function ScheduleDonationPage() {
+const timeSlots = [
+  "08:00 AM - 09:00 AM",
+  "09:00 AM - 10:00 AM",
+  "10:00 AM - 11:00 AM",
+  "11:00 AM - 12:00 PM",
+  "01:00 PM - 02:00 PM",
+  "02:00 PM - 03:00 PM",
+  "03:00 PM - 04:00 PM",
+  "04:00 PM - 05:00 PM",
+]
+
+const donationTypes = [
+  { value: "WHOLE_BLOOD", label: "Whole Blood" },
+  { value: "PLASMA", label: "Plasma" },
+  { value: "PLATELETS", label: "Platelets" },
+  { value: "DOUBLE_RED_CELLS", label: "Double Red Cells" },
+]
+
+const locations = [
+  { id: "1", name: "Main Blood Bank Center" },
+  { id: "2", name: "City Hospital Blood Collection Unit" },
+  { id: "3", name: "Mobile Blood Drive Unit" },
+  { id: "4", name: "Community Health Center" },
+]
+
+export default function DonationSchedulePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const donorId = searchParams.get("donorId")
-
   const [isLoading, setIsLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [donor, setDonor] = useState(null)
-  const [donors, setDonors] = useState([])
-  const [selectedDonorId, setSelectedDonorId] = useState(donorId || "")
-  const [date, setDate] = useState(null)
-  const [time, setTime] = useState("09:00")
+  const [error, setError] = useState("")
+  const [donorId, setDonorId] = useState("")
+  const [date, setDate] = useState<Date | undefined>(undefined)
+  const [timeSlot, setTimeSlot] = useState("")
+  const [locationType, setLocationType] = useState("")
+  const [donationType, setDonationType] = useState("")
   const [notes, setNotes] = useState("")
-  const [existingAppointments, setExistingAppointments] = useState([])
+  const [existingAppointments, setExistingAppointments] = useState<any[]>([])
 
-  // Fetch donors list if user is admin or technician
   useEffect(() => {
-    if (status === "loading") return
-
-    if (!session) {
-      router.push("/auth/signin")
-      return
+    if (status === "authenticated" && session?.user?.role !== "DONOR") {
+      router.push("/dashboard")
     }
 
-    const fetchDonors = async () => {
-      if (session.user.role === "ADMIN" || session.user.role === "BLOOD_BANK_TECHNICIAN") {
-        try {
-          const response = await fetch("/api/donors")
-          if (!response.ok) throw new Error("Failed to fetch donors")
-          const data = await response.json()
-          setDonors(data)
-        } catch (error) {
-          console.error("Error fetching donors:", error)
-          toast({
-            title: "Error",
-            description: "Failed to load donors list",
-            variant: "destructive",
-          })
-        }
-      } else if (session.user.role === "DONOR") {
-        try {
-          const response = await fetch(`/api/donors/user/${session.user.id}`)
-          if (!response.ok) throw new Error("Failed to fetch donor profile")
-          const data = await response.json()
-          setDonor(data)
-          setSelectedDonorId(data.id)
-        } catch (error) {
-          console.error("Error fetching donor profile:", error)
-          toast({
-            title: "Error",
-            description: "Failed to load your donor profile",
-            variant: "destructive",
-          })
-        }
-      }
+    if (status === "authenticated" && session?.user?.role === "DONOR") {
+      fetchDonorProfile()
+      fetchExistingAppointments()
     }
-
-    fetchDonors()
   }, [session, status, router])
 
-  // Fetch existing appointments for the selected date
-  useEffect(() => {
-    if (!date) return
-
-    const fetchAppointments = async () => {
-      try {
-        const formattedDate = format(date, "yyyy-MM-dd")
-        const response = await fetch(`/api/donation-appointments?date=${formattedDate}`)
-        if (!response.ok) throw new Error("Failed to fetch appointments")
-        const data = await response.json()
-        setExistingAppointments(data)
-      } catch (error) {
-        console.error("Error fetching appointments:", error)
+  const fetchDonorProfile = async () => {
+    try {
+      const response = await fetch(`/api/donors/user/${session?.user?.id}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch donor profile")
       }
+      const data = await response.json()
+      setDonorId(data.id)
+    } catch (error) {
+      console.error("Error fetching donor profile:", error)
+      setError("Failed to fetch donor profile. Please try again later.")
     }
-
-    fetchAppointments()
-  }, [date])
-
-  // Fetch donor details when donor ID is selected
-  useEffect(() => {
-    if (!selectedDonorId) return
-
-    const fetchDonorDetails = async () => {
-      setIsLoading(true)
-      try {
-        const response = await fetch(`/api/donors/${selectedDonorId}`)
-        if (!response.ok) throw new Error("Failed to fetch donor details")
-        const data = await response.json()
-        setDonor(data)
-      } catch (error) {
-        console.error("Error fetching donor details:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load donor details",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchDonorDetails()
-  }, [selectedDonorId])
-
-  // Format blood type for display
-  const formatBloodType = (type) => {
-    if (!type) return ""
-    return type.replace("_", " ").replace("POSITIVE", "+").replace("NEGATIVE", "-")
   }
 
-  // Check if donor is eligible to donate
-  const isEligible = (donor) => {
-    if (!donor) return false
-    if (!donor.eligibleToDonateSince) return true
-    return new Date(donor.eligibleToDonateSince) <= new Date()
+  const fetchExistingAppointments = async () => {
+    try {
+      const response = await fetch("/api/donation-appointments")
+      if (!response.ok) {
+        throw new Error("Failed to fetch existing appointments")
+      }
+      const data = await response.json()
+      setExistingAppointments(data)
+    } catch (error) {
+      console.error("Error fetching appointments:", error)
+    }
   }
 
-  // Handle form submission
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
+    setError("")
 
-    if (!selectedDonorId) {
-      toast({
-        title: "Error",
-        description: "Please select a donor",
-        variant: "destructive",
-      })
+    if (!date || !timeSlot || !locationType || !donationType) {
+      setError("Please fill in all required fields")
+      setIsLoading(false)
       return
     }
 
-    if (!date) {
-      toast({
-        title: "Error",
-        description: "Please select a date",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Combine date and time
-    const appointmentDate = new Date(date)
-    const [hours, minutes] = time.split(":").map(Number)
-    appointmentDate.setHours(hours, minutes, 0, 0)
-
-    // Check if date is in the past
-    if (appointmentDate < new Date()) {
-      toast({
-        title: "Error",
-        description: "Cannot schedule appointments in the past",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsSubmitting(true)
     try {
       const response = await fetch("/api/donation-appointments", {
         method: "POST",
@@ -178,282 +110,189 @@ export default function ScheduleDonationPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          donorId: selectedDonorId,
-          appointmentDate: appointmentDate.toISOString(),
+          donorId,
+          appointmentDate: date.toISOString(),
+          timeSlot,
+          locationId: locationType,
+          donationType,
           notes,
+          status: "SCHEDULED",
         }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to schedule donation")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to schedule appointment")
       }
 
       toast({
-        title: "Success",
-        description: "Donation appointment scheduled successfully",
+        title: "Appointment Scheduled",
+        description: "Your donation appointment has been scheduled successfully.",
       })
 
-      // Redirect to donations page
-      router.push("/dashboard/donations")
-    } catch (error) {
-      console.error("Error scheduling donation:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to schedule donation",
-        variant: "destructive",
-      })
+      // Reset form
+      setDate(undefined)
+      setTimeSlot("")
+      setLocationType("")
+      setDonationType("")
+      setNotes("")
+
+      // Refresh appointments
+      fetchExistingAppointments()
+    } catch (error: any) {
+      setError(error.message || "An error occurred. Please try again.")
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
 
   if (status === "loading") {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Schedule Donation</h1>
-        <p className="text-muted-foreground">Schedule a new blood donation appointment</p>
-      </div>
+  if (status === "authenticated" && session?.user?.role === "DONOR") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight">Schedule a Donation</h1>
+        </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Appointment Details</CardTitle>
-              <CardDescription>Enter the details for the donation appointment</CardDescription>
+              <CardTitle>Schedule New Appointment</CardTitle>
+              <CardDescription>Select your preferred date and time for blood donation</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {(session?.user?.role === "ADMIN" || session?.user?.role === "BLOOD_BANK_TECHNICIAN") && (
-                  <div className="space-y-2">
-                    <Label htmlFor="donor">Select Donor</Label>
-                    <Select value={selectedDonorId} onValueChange={setSelectedDonorId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a donor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {donors.map((donor) => (
-                          <SelectItem key={donor.id} value={donor.id}>
-                            {donor.user.name} ({formatBloodType(donor.bloodType)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <form onSubmit={handleSubmit}>
+              <CardContent className="space-y-4">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
 
                 <div className="space-y-2">
-                  <Label>Appointment Date</Label>
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    className="rounded-md border"
-                    disabled={(date) => date < new Date()}
-                  />
+                  <Label htmlFor="date">Select Date</Label>
+                  <DatePicker date={date} setDate={setDate} />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="time">Appointment Time</Label>
-                  <Select value={time} onValueChange={setTime}>
+                  <Label htmlFor="timeSlot">Select Time Slot</Label>
+                  <Select value={timeSlot} onValueChange={setTimeSlot}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select time slot" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="09:00">9:00 AM</SelectItem>
-                      <SelectItem value="10:00">10:00 AM</SelectItem>
-                      <SelectItem value="11:00">11:00 AM</SelectItem>
-                      <SelectItem value="12:00">12:00 PM</SelectItem>
-                      <SelectItem value="13:00">1:00 PM</SelectItem>
-                      <SelectItem value="14:00">2:00 PM</SelectItem>
-                      <SelectItem value="15:00">3:00 PM</SelectItem>
-                      <SelectItem value="16:00">4:00 PM</SelectItem>
+                      {timeSlots.map((slot) => (
+                        <SelectItem key={slot} value={slot}>
+                          {slot}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
+                  <Label htmlFor="locationType">Select Location</Label>
+                  <Select value={locationType} onValueChange={setLocationType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          {location.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="donationType">Donation Type</Label>
+                  <Select value={donationType} onValueChange={setDonationType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select donation type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {donationTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Additional Notes (Optional)</Label>
                   <Textarea
                     id="notes"
-                    placeholder="Any special instructions or notes for this donation"
+                    placeholder="Any special requirements or health information..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSubmitting || isLoading || !donor || !isEligible(donor)}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Scheduling...
-                    </>
-                  ) : (
-                    "Schedule Donation"
-                  )}
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Scheduling..." : "Schedule Appointment"}
                 </Button>
-              </form>
-            </CardContent>
+              </CardFooter>
+            </form>
           </Card>
 
-          {date && existingAppointments.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Existing Appointments</CardTitle>
-                <CardDescription>
-                  Appointments already scheduled for {date ? format(date, "MMMM d, yyyy") : ""}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Upcoming Appointments</CardTitle>
+              <CardDescription>View and manage your scheduled donations</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {existingAppointments.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">You have no upcoming appointments</div>
+              ) : (
+                <div className="space-y-4">
                   {existingAppointments.map((appointment) => (
-                    <div key={appointment.id} className="flex items-center justify-between rounded-md border p-3">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span>{format(new Date(appointment.date), "h:mm a")}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {appointment.donor.user.name} ({formatBloodType(appointment.donor.bloodType)})
-                        </span>
+                    <div key={appointment.id} className="border rounded-md p-4 space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div className="font-medium">{appointment.donationType.replace("_", " ")}</div>
+                        <div className="text-sm px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                          {appointment.status}
+                        </div>
                       </div>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(new Date(appointment.appointmentDate), "MMMM d, yyyy")}
+                      </div>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Clock className="mr-2 h-4 w-4" />
+                        {appointment.timeSlot}
+                      </div>
+                      <div className="text-sm">{locations.find((loc) => loc.id === appointment.locationId)?.name}</div>
+                      {appointment.notes && (
+                        <div className="text-sm text-muted-foreground mt-2 border-t pt-2">{appointment.notes}</div>
+                      )}
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          {isLoading ? (
-            <Card>
-              <CardContent className="flex h-64 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </CardContent>
-            </Card>
-          ) : donor ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Donor Information</CardTitle>
-                <CardDescription>Details about the selected donor</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">{donor.user.name}</h3>
-                    <p className="text-sm text-muted-foreground">{donor.user.email}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Blood Type</Label>
-                    <div className="flex items-center gap-2">
-                      <Droplet className="h-4 w-4 text-primary" />
-                      <Badge variant="outline" className="font-medium text-primary">
-                        {formatBloodType(donor.bloodType)}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Gender</Label>
-                    <div>{donor.gender}</div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Phone</Label>
-                    <div>{donor.user.phoneNumber || "Not provided"}</div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Date of Birth</Label>
-                    <div>
-                      {donor.dateOfBirth ? format(new Date(donor.dateOfBirth), "MMMM d, yyyy") : "Not provided"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-md border p-3">
-                  <h4 className="mb-2 font-medium">Donation Eligibility</h4>
-                  {isEligible(donor) ? (
-                    <div className="flex items-center gap-2 text-green-600">
-                      <div className="h-2 w-2 rounded-full bg-green-600"></div>
-                      <span>Eligible to donate</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-amber-600">
-                      <div className="h-2 w-2 rounded-full bg-amber-600"></div>
-                      <span>
-                        Not eligible until{" "}
-                        {donor.eligibleToDonateSince
-                          ? format(new Date(donor.eligibleToDonateSince), "MMMM d, yyyy")
-                          : "unknown date"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {donor.lastDonationDate && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Last Donation</Label>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      {format(new Date(donor.lastDonationDate), "MMMM d, yyyy")}
-                    </div>
-                  </div>
-                )}
-
-                {donor.donations && donor.donations.length > 0 && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Recent Donations</Label>
-                    <div className="mt-1 space-y-2">
-                      {donor.donations.slice(0, 3).map((donation) => (
-                        <div
-                          key={donation.id}
-                          className="flex items-center justify-between rounded-md border p-2 text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {format(new Date(donation.date), "MMMM d, yyyy")}
-                          </div>
-                          <Badge variant={donation.status === "COMPLETED" ? "success" : "secondary"}>
-                            {donation.status}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : selectedDonorId ? (
-            <Card>
-              <CardContent className="flex h-64 items-center justify-center">
-                <p className="text-muted-foreground">Failed to load donor information</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="flex h-64 items-center justify-center">
-                <p className="text-muted-foreground">Select a donor to view their information</p>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" onClick={fetchExistingAppointments}>
+                Refresh Appointments
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
+
+  return null
 }
 

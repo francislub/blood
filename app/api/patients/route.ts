@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
-import { authOptions } from "../auth/[...nextauth]/route"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 // Create a new patient
 export async function POST(req: NextRequest) {
@@ -14,6 +14,11 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, hospitalId, dateOfBirth, gender, bloodType, contactNumber, address } = await req.json()
+
+    // Validate required fields
+    if (!name || !hospitalId || !dateOfBirth || !gender || !bloodType) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
 
     // Check if patient with hospital ID already exists
     const existingPatient = await prisma.patient.findUnique({
