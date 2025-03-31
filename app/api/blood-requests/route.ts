@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
-// Create a new blood request
+// Fix the POST function to handle the required quantity field
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { bloodType, quantity, urgency, purpose, patientId, notes } = await req.json()
+    const { bloodType, units, urgency, reason, patientId, notes, requiredBy, requestedBy } = await req.json()
 
     // Check if patient exists
     if (patientId) {
@@ -31,11 +31,13 @@ export async function POST(req: NextRequest) {
       data: {
         requesterId: session.user.id,
         bloodType,
-        quantity,
+        units, // Using units instead of quantity
         urgency,
-        purpose,
+        reason, // Using reason instead of purpose
         patientId,
         notes,
+        requiredBy: requiredBy ? new Date(requiredBy) : undefined,
+        status: "PENDING",
       },
     })
 
