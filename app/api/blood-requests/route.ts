@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(bloodRequest, { status: 201 })
   } catch (error) {
-    console.error("Error creating blood request:", error)
+    // Fix error handling to avoid "payload must be object" error
+    console.error("Error creating blood request:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to create blood request" }, { status: 500 })
   }
 }
@@ -116,7 +117,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(bloodRequests)
   } catch (error) {
-    console.error("Error fetching blood requests:", error)
+    // Fix error handling
+    console.error("Error fetching blood requests:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch blood requests" }, { status: 500 })
   }
 }

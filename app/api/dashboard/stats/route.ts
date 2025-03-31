@@ -79,8 +79,14 @@ export async function GET(req: NextRequest) {
         where: { status: "PENDING" },
       })
 
+      // Fix: Transfusion model doesn't have a status field
+      // Count all transfusions scheduled for future dates
       const scheduledTransfusions = await prisma.transfusion.count({
-        where: { status: "SCHEDULED" },
+        where: {
+          transfusionDate: {
+            gte: new Date(), // Transfusions scheduled for today or future
+          },
+        },
       })
 
       roleSpecificStats = {
@@ -126,7 +132,8 @@ export async function GET(req: NextRequest) {
       ...roleSpecificStats,
     })
   } catch (error) {
-    console.error("Error fetching dashboard stats:", error)
+    // Fix error handling
+    console.error("Error fetching dashboard stats:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch dashboard stats" }, { status: 500 })
   }
 }
