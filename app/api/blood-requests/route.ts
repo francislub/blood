@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
-// Fix the POST function to handle the required quantity field
+// Create a new blood request
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -13,7 +13,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { bloodType, units, urgency, reason, patientId, notes, requiredBy, requestedBy } = await req.json()
+    const data = await req.json()
+    const { bloodType, urgency, patientId, notes, requiredBy } = data
+
+    // Handle both units and quantity fields to ensure compatibility
+    const quantity = data.quantity || data.units
+
+    if (!quantity) {
+      return NextResponse.json({ error: "Quantity is required" }, { status: 400 })
+    }
 
     // Check if patient exists
     if (patientId) {
@@ -26,14 +34,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create the blood request
+    // Create the blood request with the correct field names
     const bloodRequest = await prisma.bloodRequest.create({
       data: {
         requesterId: session.user.id,
         bloodType,
-        units, // Using units instead of quantity
+        quantity: Number(quantity), // Ensure it's a number
         urgency,
-        reason, // Using reason instead of purpose
+        purpose: data.reason || data.purpose, // Handle both field names
         patientId,
         notes,
         requiredBy: requiredBy ? new Date(requiredBy) : undefined,
@@ -43,7 +51,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(bloodRequest, { status: 201 })
   } catch (error) {
-    // Fix error handling to avoid "payload must be object" error
     console.error("Error creating blood request:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to create blood request" }, { status: 500 })
   }
@@ -95,6 +102,14 @@ export async function GET(req: NextRequest) {
             role: true,
           },
         },
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            hospitalId: true,
+            bloodType: true,
+          },
+        },
         transfusions: {
           include: {
             bloodUnits: {
@@ -119,7 +134,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(bloodRequests)
   } catch (error) {
-    // Fix error handling
     console.error("Error fetching blood requests:", error instanceof Error ? error.message : "Unknown error")
     return NextResponse.json({ error: "Failed to fetch blood requests" }, { status: 500 })
   }
